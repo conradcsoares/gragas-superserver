@@ -54,7 +54,7 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { importing: null, data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
+const S = { showLinks: false, importing: null, data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
 
 function normalize(d) {
   d = d && typeof d === 'object' ? d : {};
@@ -62,19 +62,26 @@ function normalize(d) {
     version: 2,
     settings: { ...DEFAULTS, ...(d.settings || {}) },
     games: (Array.isArray(d.games) ? d.games : []).filter(g => g && g.id && Array.isArray(g.blue) && Array.isArray(g.red) && ['blue', 'red'].includes(g.winner)),
+    // Alt accounts: games keep the account actually played; ratings count toward the main player.
+    links: (Array.isArray(d.links) ? d.links : []).filter(l => l && l.alt && l.main),
   };
 }
 
 // ---------- Elo ----------
+function linkMap(links) { const m = {}; for (const l of links || []) m[keyOf(l.alt)] = l.main; return m; }
+function resolveWith(m, id) { for (let i = 0; i < 5 && m[keyOf(id)]; i++) id = m[keyOf(id)]; return id; }
+const resolveId = id => resolveWith(S.stats?.links || {}, id);
+
 function compute(data) {
+  const links = linkMap(data.links);
   const P = {};        // key -> { id, rating, wins, losses, last }
   const deltas = {};   // game id -> { blue, red }
   const ordered = data.games.map((g, i) => ({ g, i })).sort((a, b) => a.g.date.localeCompare(b.g.date) || a.i - b.i).map(x => x.g);
-  const get = id => P[keyOf(id)] || (P[keyOf(id)] = { id, rating: START, wins: 0, losses: 0, last: 0, seen: 0 });
+  const get = id => { id = resolveWith(links, id); return P[keyOf(id)] || (P[keyOf(id)] = { id, rating: START, wins: 0, losses: 0, last: 0, seen: 0, alts: [] }); };
   let n = 0;
   for (const g of ordered) {
     n++;
-    const blue = g.blue.map(get), red = g.red.map(get);
+    const blue = [...new Set(g.blue.map(get))], red = [...new Set(g.red.map(get))];
     const avg = t => t.reduce((a, p) => a + p.rating, 0) / t.length;
     const expBlue = 1 / (1 + Math.pow(10, (avg(red) - avg(blue)) / 400));
     const dBlue = Math.round(K * ((g.winner === 'blue' ? 1 : 0) - expBlue));
@@ -83,8 +90,9 @@ function compute(data) {
       for (const p of team) { p.rating += d; p.last = d; p.seen = n; won ? p.wins++ : p.losses++; }
     }
   }
+  for (const l of data.links || []) { const p = P[keyOf(resolveWith(links, l.main))]; if (p) p.alts.push(l.alt); }
   const ladder = Object.values(P).sort((a, b) => b.rating - a.rating || b.wins - a.wins || a.id.localeCompare(b.id));
-  return { P, deltas, ordered, ladder };
+  return { P, deltas, ordered, ladder, links };
 }
 
 // ---------- GitHub sync ----------
@@ -163,7 +171,7 @@ async function load() {
 }
 function update() {
   S.stats = compute(S.data);
-  $('#playerList').innerHTML = S.stats.ladder.map(p => `<option value="${esc(p.id)}">`).join('');
+  $('#playerList').innerHTML = [...S.stats.ladder.map(p => p.id), ...S.data.links.map(l => l.alt)].map(id => `<option value="${esc(id)}">`).join('');
   render();
 }
 function commit(fn, msg) {
@@ -200,7 +208,7 @@ function render() {
   $('#leagueName').textContent = st.leagueName;
   document.title = st.leagueName;
   renderBanner();
-  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + viewLadder() + viewGames();
+  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + viewLadder() + (S.showLinks && canEdit() ? viewLinks() : '') + viewGames();
 }
 
 function viewLadder() {
@@ -211,11 +219,13 @@ function viewLadder() {
     <tbody>${ladder.map((p, i) => `<tr>
       <td class="rk">${i + 1}</td>
       <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="Open on op.gg">${nameHtml(p.id)}</a>
-        <span class="rank" style="--c:${rankFor(p.rating).color}">${rankFor(p.rating).name}</span></td>
+        <span class="rank" style="--c:${rankFor(p.rating).color}">${rankFor(p.rating).name}</span>
+        ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a.split('#')[0])).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
       <td class="r num"><span class="rating">${p.rating}</span><span class="d ${p.last > 0 ? 'pos' : p.last < 0 ? 'neg' : 'dim'}">${signed(p.last)}</span></td>
     </tr>`).join('')}</tbody></table>
-    <div class="legend">${RANKS.map((r, i) => `<span style="color:${r.color}">${r.name}${rankFloor(i) == null ? '' : ` ${rankFloor(i)}+`}</span>`).reverse().join('')}</div></div>`;
+    <div class="legend">${RANKS.map((r, i) => `<span style="color:${r.color}">${r.name}${rankFloor(i) == null ? '' : ` ${rankFloor(i)}+`}</span>`).reverse().join('')}</div>
+    ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Link alt accounts</button></div>' : ''}</div>`;
 }
 
 // Consecutive games sharing a series id (a Bo3 etc.) are shown as one row. Newest first.
@@ -234,7 +244,7 @@ function viewGames() {
   const groups = groupGames();
   if (!groups.length) return '';
   const shown = S.showAll ? groups : groups.slice(0, 5);
-  const names = ids => ids.map(id => esc((P[keyOf(id)]?.id || id).split('#')[0])).join(', ');
+  const names = ids => ids.map(id => esc((P[keyOf(resolveId(id))]?.id || id).split('#')[0])).join(', ');
   return `<div class="card"><h2>Recent games</h2>
     ${shown.map(gr => {
       const g0 = gr.games[0], n = gr.games.length;
@@ -267,7 +277,7 @@ const saveFormState = () => store.set(LS.form, S.form);
 function fixActive(f) { if (f[f.active].length >= 5 && f[other(f.active)].length < 5) f.active = other(f.active); }
 function pick(id) {
   const f = S.form;
-  if ([...f.blue, ...f.red].some(x => keyOf(x) === keyOf(id))) return toast('Already on a team.', true);
+  if ([...f.blue, ...f.red].some(x => keyOf(resolveId(x)) === keyOf(resolveId(id)))) return toast('Already on a team (same player or their alt).', true);
   fixActive(f);
   if (f[f.active].length >= 5) return toast('Both teams are full.', true);
   f[f.active].push(id);
@@ -283,7 +293,7 @@ function gamesByIds(ids) { return S.stats.ordered.filter(g => ids.includes(g.id)
 
 function viewForm() {
   const f = S.form, P = S.stats.P;
-  const inForm = new Set([...f.blue, ...f.red].map(keyOf));
+  const inForm = new Set([...f.blue, ...f.red].map(x => keyOf(resolveId(x))));
   const pool = Object.values(P).filter(p => !inForm.has(keyOf(p.id))).sort((a, b) => b.seen - a.seen || a.id.localeCompare(b.id));
   const last = S.stats.ordered[S.stats.ordered.length - 1];
   const team = side => `<div class="tbox ${side} ${f.active === side ? 'active' : ''}" data-act="set-active" data-side="${side}">
@@ -457,12 +467,13 @@ async function readShot(file) {
 // Match OCR'd names to known players (Riot game name, ignoring case/spaces/symbols).
 function matchPlayer(name, taken) {
   let best = null, bs = 0;
-  for (const p of Object.values(S.stats.P)) {
-    if (taken.has(keyOf(p.id))) continue;
-    const s = nameSim(name, p.id.split('#')[0]);
-    if (s > bs) { bs = s; best = p; }
+  const known = [...Object.values(S.stats.P).map(p => p.id), ...S.data.links.map(l => l.alt)];
+  for (const id of known) {
+    if (taken.has(keyOf(resolveId(id)))) continue;
+    const s = nameSim(name, id.split('#')[0]);
+    if (s > bs) { bs = s; best = id; }
   }
-  return bs >= 0.67 ? best.id : null;
+  return bs >= 0.67 ? best : null; // keeps the account actually played (alt or main)
 }
 function applyShots(shots) {
   const f = S.form, warn = [];
@@ -472,7 +483,7 @@ function applyShots(shots) {
   f.pending = [];
   for (const side of ['blue', 'red']) for (const n of first[side]) {
     const id = matchPlayer(n, taken);
-    if (id) { taken.add(keyOf(id)); team[side].push(id); } else f.pending.push({ side, name: n });
+    if (id) { taken.add(keyOf(resolveId(id))); team[side].push(id); } else f.pending.push({ side, name: n });
   }
   Object.assign(f, { blue: team.blue, red: team.red, results: [], active: 'blue' });
   if (first.date) f.date = first.date;
@@ -516,6 +527,34 @@ function addPending(i) {
   f.pending.splice(i, 1);
   f.active = p.side;
   pick(S.stats.P[keyOf(id)]?.id || id);
+}
+
+// ----- alt accounts (admin only) -----
+function viewLinks() {
+  const links = S.data.links;
+  return `<div class="card" id="links"><h2>Link alt accounts</h2>
+    <p class="hint" style="margin-top:0">Games played on an alt count toward the main player's rating. Unlinking puts them back on the alt.</p>
+    <div class="cols" style="gap:8px">
+      <input id="linkAlt" list="playerList" placeholder="Alt account — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
+      <input id="linkMain" list="playerList" placeholder="Main player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
+    </div>
+    <div class="row end" style="margin-top:8px"><button class="btn" data-act="hide-links">Done</button><button class="btn gold" data-act="add-link">Link</button></div>
+    ${links.length ? `<div style="margin-top:12px">${links.map((l, i) => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto;align-items:center">
+      <div class="side">${nameHtml(l.alt)} <span class="muted">→</span> <b>${nameHtml(resolveId(l.main))}</b></div>
+      <button class="x" data-act="unlink" data-i="${i}" title="Unlink">Unlink</button></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+function addLink() {
+  const altIn = parseRiotId($('#linkAlt').value), mainIn = parseRiotId($('#linkMain').value);
+  if (!altIn || !mainIn) return toast('Use Name#TAG for both accounts.', true);
+  const known = id => S.stats.P[keyOf(id)]?.id || S.data.links.find(l => keyOf(l.alt) === keyOf(id))?.alt || id;
+  const alt = known(altIn), main = resolveId(known(mainIn));
+  if (keyOf(alt) === keyOf(main)) return toast('That’s the same account.', true);
+  commit(d => {
+    d.links = d.links.filter(l => keyOf(l.alt) !== keyOf(alt));
+    for (const l of d.links) if (keyOf(l.main) === keyOf(alt)) l.main = main; // alt had its own alts: move them over
+    d.links.push({ alt, main });
+  }, `${alt.split('#')[0]} now counts for ${main.split('#')[0]}. Publish to share.`);
 }
 
 function viewKeyBox() {
@@ -587,6 +626,10 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'toggle-all': S.showAll = !S.showAll; render(); break;
+    case 'show-links': S.showLinks = true; render(); $('#links')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); break;
+    case 'hide-links': S.showLinks = false; render(); break;
+    case 'add-link': addLink(); break;
+    case 'unlink': { const l = S.data.links[Number(a.dataset.i)]; commit(d => { d.links.splice(Number(a.dataset.i), 1); }, `Unlinked ${l.alt.split('#')[0]}.`); break; }
     case 'publish': publish(); break;
     case 'discard':
       if (confirm('Throw away your unpublished changes?')) { store.del(LS.draft); load(); }
