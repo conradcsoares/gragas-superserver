@@ -6,8 +6,7 @@
 
 const START = 1000;
 const K = 32;
-const REGIONS = ['na', 'euw', 'eune', 'kr', 'br', 'lan', 'las', 'oce', 'tr', 'ru', 'jp', 'me', 'ph', 'sg', 'th', 'tw', 'vn'];
-const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form' };
+const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2' };
 const DEFAULTS = { leagueName: 'Customs League', region: 'na' };
 
 // ---------- utils ----------
@@ -39,7 +38,7 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: store.get(LS.form), showSetup: false, showAll: false, busy: false };
+const S = { data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
 
 function normalize(d) {
   d = d && typeof d === 'object' ? d : {};
@@ -55,15 +54,17 @@ function compute(data) {
   const P = {};        // key -> { id, rating, wins, losses, last }
   const deltas = {};   // game id -> { blue, red }
   const ordered = data.games.map((g, i) => ({ g, i })).sort((a, b) => a.g.date.localeCompare(b.g.date) || a.i - b.i).map(x => x.g);
-  const get = id => P[keyOf(id)] || (P[keyOf(id)] = { id, rating: START, wins: 0, losses: 0, last: 0 });
+  const get = id => P[keyOf(id)] || (P[keyOf(id)] = { id, rating: START, wins: 0, losses: 0, last: 0, seen: 0 });
+  let n = 0;
   for (const g of ordered) {
+    n++;
     const blue = g.blue.map(get), red = g.red.map(get);
     const avg = t => t.reduce((a, p) => a + p.rating, 0) / t.length;
     const expBlue = 1 / (1 + Math.pow(10, (avg(red) - avg(blue)) / 400));
     const dBlue = Math.round(K * ((g.winner === 'blue' ? 1 : 0) - expBlue));
     deltas[g.id] = { blue: dBlue, red: -dBlue };
     for (const [team, d, won] of [[blue, dBlue, g.winner === 'blue'], [red, -dBlue, g.winner === 'red']]) {
-      for (const p of team) { p.rating += d; p.last = d; won ? p.wins++ : p.losses++; }
+      for (const p of team) { p.rating += d; p.last = d; p.seen = n; won ? p.wins++ : p.losses++; }
     }
   }
   const ladder = Object.values(P).sort((a, b) => b.rating - a.rating || b.wins - a.wins || a.id.localeCompare(b.id));
@@ -72,7 +73,7 @@ function compute(data) {
 
 // ---------- GitHub sync ----------
 function ghDefaults() {
-  const h = location.hostname; let owner = '', repo = '';
+  const h = location.hostname; let owner = 'conradcsoares', repo = 'customs-league'; // fallback when not on github.io
   if (h.endsWith('.github.io')) {
     owner = h.split('.')[0];
     const seg = location.pathname.split('/').filter(Boolean)[0];
@@ -105,7 +106,7 @@ async function ghFetchFile(c) {
 }
 async function publish() {
   const c = ghCfg();
-  if (!ghReady(c)) { S.showSetup = true; render(); $('#setup')?.scrollIntoView({ behavior: 'smooth' }); toast('Add a GitHub token in Setup to publish.'); return; }
+  if (!ghReady(c)) { S.askKey = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => $('#ghToken')?.focus(), 50); return; }
   if (S.busy) return;
   S.busy = true; renderBanner();
   try {
@@ -116,7 +117,10 @@ async function publish() {
     await ghRequest('PUT', c, { message: `Update ladder (${S.data.games.length} games)`, content: b64enc(text), branch: c.branch, ...(remote.sha ? { sha: remote.sha } : {}) });
     S.base = hash(canon(text)); S.dirty = false; S.remoteChanged = false; store.del(LS.draft);
     toast('Published! The live site updates in about a minute.');
-  } catch (e) { toast(`Publish failed — ${e.message}`, true); }
+  } catch (e) {
+    if (e.status === 401) { store.set(LS.gh, { ...c, token: '' }); S.askKey = true; toast('Your GitHub key expired or was revoked — paste a new one.', true); }
+    else toast(`Publish failed — ${e.message}`, true);
+  }
   finally { S.busy = false; render(); }
 }
 
@@ -177,7 +181,7 @@ function render() {
   $('#leagueName').textContent = st.leagueName;
   document.title = st.leagueName;
   renderBanner();
-  $('#view').innerHTML = (S.form ? viewForm() : '') + viewLadder() + viewGames() + (S.showSetup ? viewSetup() : '');
+  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + viewLadder() + viewGames();
 }
 
 function viewLadder() {
@@ -193,92 +197,136 @@ function viewLadder() {
     </tr>`).join('')}</tbody></table></div>`;
 }
 
+// Consecutive games sharing a series id (a Bo3 etc.) are shown as one row. Newest first.
+function groupGames() {
+  const out = [];
+  for (const g of [...S.stats.ordered].reverse()) {
+    const last = out[out.length - 1];
+    if (g.series && last && last.series === g.series) last.games.unshift(g);
+    else out.push({ series: g.series || null, games: [g] });
+  }
+  return out;
+}
+
 function viewGames() {
-  const { ordered, deltas, P } = S.stats;
-  if (!ordered.length) return '';
-  const list = [...ordered].reverse();
-  const shown = S.showAll ? list : list.slice(0, 5);
-  const names = ids => ids.map(id => esc(P[keyOf(id)].id.split('#')[0])).join(', ');
+  const { deltas, P } = S.stats;
+  const groups = groupGames();
+  if (!groups.length) return '';
+  const shown = S.showAll ? groups : groups.slice(0, 5);
+  const names = ids => ids.map(id => esc((P[keyOf(id)]?.id || id).split('#')[0])).join(', ');
   return `<div class="card"><h2>Recent games</h2>
-    ${shown.map(g => {
-      const w = g.winner, l = w === 'blue' ? 'red' : 'blue', d = deltas[g.id][w];
+    ${shown.map(gr => {
+      const g0 = gr.games[0], n = gr.games.length;
+      const bw = gr.games.filter(g => g.winner === 'blue').length, rw = n - bw;
+      const top = bw > rw || (bw === rw && n > 1) ? 'blue' : 'red', bot = top === 'blue' ? 'red' : 'blue';
+      const tw = top === 'blue' ? bw : rw, lw = n - tw;
+      const net = gr.games.reduce((a, g) => a + deltas[g.id][top], 0);
+      const tie = tw === lw;
+      const score = n > 1 ? ` ${tw}–${lw}` : '';
+      const ids = gr.games.map(g => g.id).join(',');
       return `<div class="game"><div class="teams">
-          <div class="side"><b class="pos">Won</b> · ${names(g[w])}</div>
-          <div class="side muted">Lost · ${names(g[l])}</div>
-          <div class="meta">${fmtDate(g.date)} · ${signed(d)} / ${signed(-d)}</div></div>
-        <div class="right"><button class="x" data-act="edit" data-id="${esc(g.id)}" title="Edit">Edit</button><button class="x" data-act="delete" data-id="${esc(g.id)}" title="Delete">✕</button></div></div>`;
+          <div class="side">${tie ? `<b>Tied${score}</b>` : `<b class="pos">Won${score}</b>`} · ${names(g0[top])}</div>
+          <div class="side muted">${tie ? `Tied${score}` : `Lost${n > 1 ? ` ${lw}–${tw}` : ''}`} · ${names(g0[bot])}</div>
+          <div class="meta">${n > 1 ? `${n} games · ` : ''}${fmtDate(g0.date)} · ${signed(net)} / ${signed(-net)}</div></div>
+        <div class="right"><button class="x" data-act="rematch" data-ids="${esc(ids)}" title="Record more games with these teams">Rematch</button>
+          <button class="x" data-act="edit" data-ids="${esc(ids)}">Edit</button>
+          <button class="x" data-act="delete" data-ids="${esc(ids)}" title="Delete">✕</button></div></div>`;
     }).join('')}
-    ${list.length > 5 ? `<div class="row end" style="margin-top:8px"><button class="link" data-act="toggle-all">${S.showAll ? 'Show less' : `Show all ${list.length} games`}</button></div>` : ''}
+    ${groups.length > 5 ? `<div class="row end" style="margin-top:8px"><button class="link" data-act="toggle-all">${S.showAll ? 'Show less' : `Show all ${groups.length}`}</button></div>` : ''}
   </div>`;
 }
 
-function emptyForm() { return { id: null, date: today(), winner: '', blue: Array(5).fill(''), red: Array(5).fill('') }; }
-function viewForm() {
+// ----- record form: tap players into teams, tap the winner once per game -----
+const TEAM = { blue: 'Team 1', red: 'Team 2' };
+const other = s => (s === 'blue' ? 'red' : 'blue');
+function emptyForm(teams) {
+  return { editIds: [], date: today(), blue: teams ? [...teams.blue] : [], red: teams ? [...teams.red] : [], results: [], active: 'blue' };
+}
+const saveFormState = () => store.set(LS.form, S.form);
+function fixActive(f) { if (f[f.active].length >= 5 && f[other(f.active)].length < 5) f.active = other(f.active); }
+function pick(id) {
   const f = S.form;
-  const col = side => `<div class="team-col ${side}"><h3>${side === 'blue' ? 'Blue team' : 'Red team'}</h3>
-    ${f[side].map((v, i) => `<input data-side="${side}" data-i="${i}" value="${esc(v)}" list="playerList" placeholder="Name#TAG" autocomplete="off" spellcheck="false" aria-label="${side} player ${i + 1}">`).join('')}</div>`;
-  return `<div class="card">
-    <div class="row" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">${f.id ? 'Edit game' : 'Record a game'}</h2>
+  if ([...f.blue, ...f.red].some(x => keyOf(x) === keyOf(id))) return toast('Already on a team.', true);
+  fixActive(f);
+  if (f[f.active].length >= 5) return toast('Both teams are full.', true);
+  f[f.active].push(id);
+  fixActive(f); saveFormState(); render();
+}
+function addNew() {
+  const el = $('#newPlayer'), id = parseRiotId(el.value);
+  if (!id) { el.classList.add('bad'); return toast('Use Riot ID format: Name#TAG', true); }
+  pick(S.stats.P[keyOf(id)]?.id || id);
+  setTimeout(() => $('#newPlayer')?.focus(), 0);
+}
+function gamesByIds(ids) { return S.stats.ordered.filter(g => ids.includes(g.id)); }
+
+function viewForm() {
+  const f = S.form, P = S.stats.P;
+  const inForm = new Set([...f.blue, ...f.red].map(keyOf));
+  const pool = Object.values(P).filter(p => !inForm.has(keyOf(p.id))).sort((a, b) => b.seen - a.seen || a.id.localeCompare(b.id));
+  const last = S.stats.ordered[S.stats.ordered.length - 1];
+  const team = side => `<div class="tbox ${side} ${f.active === side ? 'active' : ''}" data-act="set-active" data-side="${side}">
+      <div class="tbox-head"><h3>${TEAM[side]}</h3><span class="small muted">${f[side].length}/5</span></div>
+      ${f[side].map(id => `<button class="mem" data-act="unpick" data-side="${side}" data-id="${esc(id)}" title="Remove">
+        <span class="nm">${esc(id.split('#')[0])}</span><span class="rm">✕</span></button>`).join('')}
+      ${Array(Math.max(0, 5 - f[side].length)).fill('<div class="mem empty"></div>').join('')}</div>`;
+  const bw = f.results.filter(r => r === 'blue').length, rw = f.results.length - bw;
+  const n = f.results.length;
+  return `<div class="card form">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">${f.editIds.length ? 'Edit' : 'Record games'}</h2>
       <input type="date" data-f="date" value="${esc(f.date)}" style="width:auto;margin:0"></div>
-    <div class="cols">${col('blue')}${col('red')}</div>
-    <div class="winner"><button class="btn blue ${f.winner === 'blue' ? 'on' : ''}" data-act="winner" data-side="blue">Blue won</button>
-      <button class="btn red ${f.winner === 'red' ? 'on' : ''}" data-act="winner" data-side="red">Red won</button></div>
-    <div class="row end"><button class="btn" data-act="cancel">Cancel</button><button class="btn gold" data-act="save">Save game</button></div>
-    <p class="hint" style="margin-bottom:0">Type each player's Riot ID, e.g. <code>Faker#KR1</code>. New players join the ladder automatically at 1000.</p>
+    ${!f.editIds.length && last ? `<div class="row" style="margin-bottom:12px">
+      <button class="btn sm" data-act="last-teams">↺ Same teams as last game</button>
+      ${f.blue.length || f.red.length ? '<button class="btn sm" data-act="swap">⇄ Swap</button><button class="btn sm" data-act="clear-teams">Clear</button>' : ''}</div>` : ''}
+    <div class="tboxes">${team('blue')}${team('red')}</div>
+
+    <div class="pool">
+      <div class="small muted" style="margin-bottom:6px">${pool.length ? `Tap a player to add them to <b class="${f.active}-t">${TEAM[f.active]}</b>` : P && Object.keys(P).length ? 'Everyone is on a team.' : 'Add players by Riot ID — next time they’ll be one tap away.'}</div>
+      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}">${esc(p.id.split('#')[0])}</button>`).join('')}</div>
+      <div class="row nowrap" style="margin-top:8px"><input id="newPlayer" list="playerList" placeholder="New player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
+        <button class="btn" data-act="add-new">Add</button></div>
+    </div>
+
+    <h3 class="sub">Who won? <span class="muted">Tap once per game — Bo3? tap three times.</span></h3>
+    <div class="winner"><button class="btn blue" data-act="result" data-side="blue">${TEAM.blue} won</button>
+      <button class="btn red" data-act="result" data-side="red">${TEAM.red} won</button></div>
+    ${n ? `<div class="results">${f.results.map((r, i) => `<button class="res ${r}" data-act="unresult" data-i="${i}" title="Remove game ${i + 1}">G${i + 1} · ${TEAM[r]} <span class="rm">✕</span></button>`).join('')}
+      ${n > 1 ? `<span class="small muted">${TEAM.blue} ${bw}–${rw} ${TEAM.red}</span>` : ''}</div>` : ''}
+    <div class="row end" style="margin-top:14px"><button class="btn" data-act="cancel">Cancel</button>
+      <button class="btn gold" data-act="save">${n > 1 ? `Save ${n} games` : 'Save game'}</button></div>
   </div>`;
 }
+
 function saveForm() {
   const f = S.form;
-  const blue = [], red = [], bad = [];
-  for (const side of ['blue', 'red']) f[side].forEach((v, i) => {
-    if (!v.trim()) return;
-    const id = parseRiotId(v);
-    if (!id) bad.push(`${side}-${i}`);
-    else (side === 'blue' ? blue : red).push(S.stats.P[keyOf(id)]?.id || id); // reuse existing casing
-  });
-  document.querySelectorAll('input[data-side]').forEach(el => el.classList.toggle('bad', bad.includes(`${el.dataset.side}-${el.dataset.i}`)));
-  if (bad.length) return toast('Use Riot ID format: Name#TAG', true);
-  if (!blue.length || !red.length) return toast('Add players to both teams.', true);
-  const keys = [...blue, ...red].map(keyOf);
-  if (new Set(keys).size !== keys.length) return toast('Someone is listed twice.', true);
-  if (!f.winner) return toast('Pick who won.', true);
-  const game = { id: f.id || 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: f.date || today(), blue, red, winner: f.winner };
+  if (!f.blue.length || !f.red.length) return toast('Add players to both teams.', true);
+  if (!f.results.length) return toast('Tap who won each game.', true);
+  const mk = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const series = f.results.length > 1 ? mk('s') : null;
+  const games = f.results.map(w => ({ id: mk('g'), date: f.date || today(), blue: [...f.blue], red: [...f.red], winner: w, ...(series ? { series } : {}) }));
+  const editIds = f.editIds;
   S.form = null; store.del(LS.form);
   commit(d => {
-    const i = d.games.findIndex(g => g.id === game.id);
-    if (i >= 0) d.games[i] = game; else d.games.push(game);
-  }, f.id ? 'Game updated.' : 'Game saved — hit Publish to share it.');
+    let at = d.games.length;
+    if (editIds.length) {
+      const i = d.games.findIndex(g => editIds.includes(g.id));
+      d.games = d.games.filter(g => !editIds.includes(g.id));
+      if (i >= 0) at = i; else at = d.games.length;
+    }
+    d.games.splice(at, 0, ...games);
+  }, editIds.length ? 'Updated.' : `${games.length > 1 ? games.length + ' games' : 'Game'} saved — hit Publish to share.`);
 }
 
-function viewSetup() {
-  const c = ghCfg(), st = S.data.settings;
-  return `<div class="card" id="setup"><h2>Setup</h2>
-    <div class="grid2">
-      <div><label>League name</label><input id="sName" value="${esc(st.leagueName)}" maxlength="40"></div>
-      <div><label>op.gg region (for player links)</label><select id="sRegion">${REGIONS.map(r => `<option value="${r}" ${st.region === r ? 'selected' : ''}>${r.toUpperCase()}</option>`).join('')}</select></div>
-    </div>
-    <div class="row end" style="margin:10px 0 18px"><button class="btn sm" data-act="save-settings">Save</button></div>
-
-    <h2><span class="dot ${ghReady(c) ? 'on' : ''}"></span>Publishing</h2>
-    <p class="hint" style="margin-top:0">Whoever records games needs a GitHub token (once per device) so the site can save the ladder to the repo. It's stored only in this browser.</p>
-    <div class="grid2">
-      <div><label>Repo owner</label><input id="ghOwner" value="${esc(c.owner)}" placeholder="github-username" autocomplete="off"></div>
-      <div><label>Repo name</label><input id="ghRepo" value="${esc(c.repo)}" placeholder="customs-league" autocomplete="off"></div>
-    </div>
-    <label>Token</label><input id="ghToken" type="password" value="${esc(c.token)}" placeholder="github_pat_…" autocomplete="off">
-    <div class="row end" style="margin-top:4px">${c.token ? '<button class="btn sm" data-act="gh-forget">Forget token</button>' : ''}<button class="btn sm gold" data-act="gh-save">Save &amp; test</button></div>
-    <div class="hint"><ol>
-      <li>Go to <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--gold)">GitHub → new fine-grained token</a>.</li>
-      <li>Repository access: <b>Only select repositories</b> → this repo.</li>
-      <li>Permissions → <b>Contents: Read and write</b>. Generate and paste it above.</li></ol></div>
-
-    <h2 style="margin-top:18px">Fix a player</h2>
-    <p class="hint" style="margin-top:0">Someone changed their Riot ID? Rename them everywhere.</p>
-    <div class="grid2"><input id="renFrom" list="playerList" placeholder="Old Name#TAG" autocomplete="off"><input id="renTo" placeholder="New Name#TAG" autocomplete="off"></div>
-    <div class="row end"><button class="btn sm" data-act="rename">Rename</button></div>
-
-    <h2 style="margin-top:18px">Backup</h2>
-    <div class="row"><button class="btn sm" data-act="export">Export JSON</button><button class="btn sm" data-act="import">Import JSON</button></div>
+// Shown only the first time someone presses Publish on a device.
+function viewKeyBox() {
+  return `<div class="card" id="keybox"><h2>One-time setup to publish</h2>
+    <p class="hint" style="margin-top:0">To save games for everyone, this device needs a GitHub key. You only do this once.</p>
+    <ol class="hint">
+      <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--gold)">GitHub → new fine-grained token</a>.</li>
+      <li>Repository access: <b>Only select repositories</b> → <b>${esc(ghCfg().repo)}</b>.</li>
+      <li>Permissions → <b>Contents: Read and write</b>. Generate it and paste it here.</li></ol>
+    <input id="ghToken" type="password" placeholder="Paste key: github_pat_…" autocomplete="off">
+    <div class="row end"><button class="btn" data-act="cancel-key">Cancel</button><button class="btn gold" data-act="save-key">Save &amp; publish</button></div>
   </div>`;
 }
 
@@ -291,84 +339,68 @@ document.addEventListener('click', async e => {
     case 'open-form':
       if (!S.form) S.form = emptyForm();
       render(); window.scrollTo({ top: 0, behavior: 'smooth' });
-      setTimeout(() => document.querySelector('input[data-side]')?.focus(), 50);
       break;
     case 'cancel': S.form = null; store.del(LS.form); render(); break;
-    case 'winner': S.form.winner = a.dataset.side; store.set(LS.form, S.form); render(); break;
+    case 'set-active': S.form.active = a.dataset.side; saveFormState(); render(); break;
+    case 'pick': pick(id); break;
+    case 'unpick': {
+      const side = a.dataset.side;
+      S.form[side] = S.form[side].filter(x => x !== id); S.form.active = side; saveFormState(); render(); break;
+    }
+    case 'add-new': addNew(); break;
+    case 'last-teams': {
+      const g = S.stats.ordered[S.stats.ordered.length - 1];
+      Object.assign(S.form, { blue: [...g.blue], red: [...g.red] }); saveFormState(); render(); break;
+    }
+    case 'swap': { const f = S.form; [f.blue, f.red] = [f.red, f.blue]; f.results = f.results.map(other); saveFormState(); render(); break; }
+    case 'clear-teams': Object.assign(S.form, { blue: [], red: [], active: 'blue' }); saveFormState(); render(); break;
+    case 'result':
+      if (S.form.results.length >= 7) return toast('Max 7 games at once.', true);
+      S.form.results.push(a.dataset.side); saveFormState(); render(); break;
+    case 'unresult': S.form.results.splice(Number(a.dataset.i), 1); saveFormState(); render(); break;
     case 'save': saveForm(); break;
-    case 'edit': {
-      const g = S.data.games.find(x => x.id === id);
-      const pad = arr => [...arr, '', '', '', '', ''].slice(0, 5);
-      S.form = { id, date: g.date, winner: g.winner, blue: pad(g.blue), red: pad(g.red) };
-      render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    case 'rematch': case 'edit': {
+      const games = gamesByIds(a.dataset.ids.split(','));
+      if (!games.length) break;
+      S.form = emptyForm(games[0]);
+      if (act === 'edit') Object.assign(S.form, { editIds: games.map(g => g.id), date: games[0].date, results: games.map(g => g.winner) });
+      saveFormState(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
       break;
     }
-    case 'delete':
-      if (confirm('Delete this game? Ratings will be recalculated.')) commit(d => { d.games = d.games.filter(g => g.id !== id); }, 'Game deleted.');
+    case 'delete': {
+      const ids = a.dataset.ids.split(',');
+      if (confirm(ids.length > 1 ? `Delete all ${ids.length} games in this series? Ratings will be recalculated.` : 'Delete this game? Ratings will be recalculated.'))
+        commit(d => { d.games = d.games.filter(g => !ids.includes(g.id)); }, 'Deleted.');
       break;
+    }
     case 'toggle-all': S.showAll = !S.showAll; render(); break;
-    case 'toggle-setup':
-      S.showSetup = !S.showSetup; render();
-      if (S.showSetup) $('#setup').scrollIntoView({ behavior: 'smooth' });
-      break;
     case 'publish': publish(); break;
     case 'discard':
       if (confirm('Throw away your unpublished changes?')) { store.del(LS.draft); load(); }
       break;
-    case 'save-settings':
-      commit(d => { d.settings.leagueName = $('#sName').value.trim() || DEFAULTS.leagueName; d.settings.region = $('#sRegion').value; }, 'Saved.');
-      break;
-    case 'gh-save': {
-      const c = { ...ghCfg(), owner: $('#ghOwner').value.trim(), repo: $('#ghRepo').value.trim(), token: $('#ghToken').value.trim() };
-      store.set(LS.gh, c);
-      if (!ghReady(c)) { toast('Fill in owner, repo and token.', true); render(); return; }
-      toast('Testing…');
-      try {
-        const r = await ghFetchFile(c);
-        if (!S.dirty && r.text) { S.data = normalize(JSON.parse(r.text)); S.base = hash(canon(r.text)); update(); }
-        toast(r.text ? 'Connected! You can publish from this device.' : 'Connected — the data file will be created when you publish.');
-      } catch (err) { toast(`Couldn't connect — ${err.message}`, true); }
-      render();
+    case 'cancel-key': S.askKey = false; render(); break;
+    case 'save-key': {
+      const token = $('#ghToken').value.trim();
+      if (!token) return toast('Paste your GitHub key first.', true);
+      const c = { ...ghCfg(), token };
+      try { await ghFetchFile(c); }
+      catch (err) { return toast(err.status === 401 ? 'That key didn’t work — check you copied all of it.' : `Couldn't connect — ${err.message}`, true); }
+      store.set(LS.gh, c); S.askKey = false;
+      publish();
       break;
     }
-    case 'gh-forget': { const c = ghCfg(); c.token = ''; store.set(LS.gh, c); toast('Token removed.'); render(); break; }
-    case 'rename': {
-      const from = parseRiotId($('#renFrom').value), to = parseRiotId($('#renTo').value);
-      if (!from || !to) return toast('Use Name#TAG for both.', true);
-      if (!S.stats.P[keyOf(from)]) return toast(`${from} hasn't played yet.`, true);
-      if (S.stats.P[keyOf(to)] && keyOf(to) !== keyOf(from) && !confirm(`${to} already exists. Merge ${from} into them?`)) return;
-      const swap = arr => arr.map(x => (keyOf(x) === keyOf(from) ? to : x));
-      commit(d => { d.games.forEach(g => { g.blue = swap(g.blue); g.red = swap(g.red); }); }, `Renamed to ${to}.`);
-      break;
-    }
-    case 'export': {
-      const url = URL.createObjectURL(new Blob([serialize(S.data)], { type: 'application/json' }));
-      const link = Object.assign(document.createElement('a'), { href: url, download: `ladder-${today()}.json` });
-      document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      break;
-    }
-    case 'import': $('#importFile').click(); break;
   }
 });
 
 document.addEventListener('input', e => {
   const el = e.target;
-  if (!S.form) return;
-  if (el.dataset.side) { S.form[el.dataset.side][Number(el.dataset.i)] = el.value; el.classList.remove('bad'); }
-  else if (el.dataset.f === 'date') S.form.date = el.value;
-  else return;
-  store.set(LS.form, S.form);
+  if (el.id === 'newPlayer') el.classList.remove('bad');
+  if (S.form && el.dataset.f === 'date') { S.form.date = el.value; saveFormState(); }
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.dataset?.side) { e.preventDefault(); saveForm(); }
-});
-$('#importFile').addEventListener('change', e => {
-  const file = e.target.files[0]; e.target.value = '';
-  if (!file) return;
-  file.text().then(t => {
-    const d = normalize(JSON.parse(t));
-    if (confirm(`Import ${d.games.length} games? This replaces the ladder on this device (publish afterwards to share).`)) commit(x => { x.settings = d.settings; x.games = d.games; }, 'Imported.');
-  }).catch(() => toast('That file isn’t valid ladder JSON.', true));
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'newPlayer') { e.preventDefault(); addNew(); }
+  if (e.target.id === 'ghToken') { e.preventDefault(); $('[data-act=save-key]').click(); }
 });
 
 load();

@@ -3,12 +3,13 @@
 A simple Elo ladder for our 5v5 League of Legends custom games. It's a static site (plain HTML/CSS/JS, no build step) that runs free on GitHub Pages.
 
 - One page: the ladder, a **+ Record game** button and the last few games.
+- **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
 - Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
 - Anyone who plays a recorded game joins the ladder automatically, starting at **1000**.
 
 ## Why games are entered by hand
 
-Riot's API doesn't return custom games, apart from tournament-code games, which need a special production key. That's why op.gg and similar sites can't show customs either. So after each game, someone types the 10 Riot IDs and picks the winner. It takes about 20 seconds, and names autocomplete after the first game.
+Riot's API doesn't return custom games, apart from tournament-code games, which need a special production key. That's why op.gg and similar sites can't show customs either. A new player's Riot ID is typed once. After that, they're a one-tap button.
 
 ## How the rating works
 
@@ -23,17 +24,14 @@ Riot's API doesn't return custom games, apart from tournament-code games, which 
 2. In the repo, go to **Settings → Pages**. Under Source, pick **Deploy from a branch**, then branch `main` and folder `/ (root)`.
 3. The site goes live at `https://<your-username>.github.io/customs-league/`.
 
-### Letting the site save games
+### Saving games
 
-Games are stored in `data/league.json` in the repo. Anyone can view the site. To record games:
+Games are stored in `data/league.json` in the repo. Anyone can view the site. The first time someone presses **Publish** on a device, the site asks for a GitHub key:
 
 1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Only select repositories** → this repo, and **Contents: Read and write**.
-2. On the site, click **Setup** (at the bottom of the page), paste the token and click **Save & test**.
-3. After recording a game, click **Publish** in the banner. The live site updates in about a minute.
+2. Paste it into the box and click **Save & publish**. The live site updates in about a minute.
 
-The token is stored only in that browser. To let a friend record games, add them as a repo collaborator and have them make their own token.
-
-**Setup** also has the op.gg region for the profile links, renaming a player whose Riot ID changed, and JSON export/import for backups.
+The key is stored only in that browser. To let a friend record games, add them as a repo collaborator and have them make their own key.
 
 ## Running locally
 
