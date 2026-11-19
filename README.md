@@ -1,4 +1,4 @@
-# Customs League
+# Gragas Superserver
 
 A simple Elo ladder for our 5v5 League of Legends custom games. It's a static site (plain HTML/CSS/JS, no build step) that runs free on GitHub Pages.
 

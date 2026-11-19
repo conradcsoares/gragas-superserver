@@ -1,5 +1,5 @@
 'use strict';
-/* Customs League — a minimal Elo ladder for 5v5 League of Legends customs.
+/* Gragas Superserver — a minimal Elo ladder for 5v5 League of Legends customs.
  * Players are identified by Riot ID (Name#TAG). Games are entered by hand (Riot's API
  * doesn't expose custom games), stored in data/league.json and published via the GitHub API.
  * Ratings are recomputed from the full game list on every load. */
@@ -23,7 +23,8 @@ const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.ad
 // Only the owner edits. Visiting the site once with #admin unlocks editing on that device;
 // everyone else sees a read-only ladder.
 if (location.hash === '#admin') { try { localStorage.setItem(LS.admin, '1'); } catch { /* ignore */ } history.replaceState(null, '', location.pathname + location.search); }
-const DEFAULTS = { leagueName: 'Customs League', region: 'na' };
+const LEAGUE_NAME = 'Gragas Superserver';
+const DEFAULTS = { leagueName: LEAGUE_NAME, region: 'na' };
 
 // ---------- utils ----------
 const $ = s => document.querySelector(s);
@@ -205,8 +206,8 @@ const canEdit = () => store.get(LS.admin) === 1 || !!ghCfg().token;
 function render() {
   const st = S.data.settings;
   $('#recordBtn').hidden = !canEdit();
-  $('#leagueName').textContent = st.leagueName;
-  document.title = st.leagueName;
+  $('#leagueName').textContent = LEAGUE_NAME;
+  document.title = LEAGUE_NAME;
   renderBanner();
   $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + viewLadder() + (S.showLinks && canEdit() ? viewLinks() : '') + viewGames();
 }
