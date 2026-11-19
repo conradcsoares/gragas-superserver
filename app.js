@@ -224,7 +224,7 @@ function viewLadder() {
         <span class="rank" style="--c:${rankFor(p.rating).color}">${rankFor(p.rating).name}</span>
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a.split('#')[0])).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
-      <td class="r num"><span class="rating">${p.rating}</span><span class="d ${p.last > 0 ? 'pos' : p.last < 0 ? 'neg' : 'dim'}">${signed(p.last)}</span></td>
+      <td class="r num"><span class="rating">${p.rating}</span></td>
     </tr>`).join('')}</tbody></table>
     <div class="legend">${RANKS.map((r, i) => `<span style="color:${r.color}">${r.name}${rankFloor(i) == null ? '' : ` ${rankFloor(i)}+`}</span>`).reverse().join('')}</div>
     ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Link alt accounts</button></div>' : ''}</div>`;
