@@ -23,13 +23,13 @@ Riot's API doesn't return custom games, apart from tournament-code games, which 
 
 ## Setup (about 5 minutes)
 
-1. Create a GitHub repo (e.g. `customs-league`) and push these files to it.
+1. Create a GitHub repo (e.g. `gragas-superserver`) and push these files to it.
 2. In the repo, go to **Settings → Pages**. Under Source, pick **Deploy from a branch**, then branch `main` and folder `/ (root)`.
-3. The site goes live at `https://<your-username>.github.io/customs-league/`.
+3. The site goes live at `https://<your-username>.github.io/gragas-superserver/`.
 
 ### Saving games
 
-Games are stored in `data/league.json` in the repo. Visitors see a read-only ladder. To edit, open `https://conradcsoares.github.io/customs-league/#admin` once on your device. That unlocks **+ Record game** there. The first time you press **Publish**, the site asks for a GitHub key:
+Games are stored in `data/league.json` in the repo. Visitors see a read-only ladder. To edit, open `https://conradcsoares.github.io/gragas-superserver/#admin` once on your device. That unlocks **+ Record game** there. The first time you press **Publish**, the site asks for a GitHub key:
 
 1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new). Pick **Only select repositories** → this repo. Under Permissions, click **+ Add permissions** → **Contents**, then set it to **Read and write**.
 2. Paste it into the box and click **Save & publish**. The live site updates in about a minute.

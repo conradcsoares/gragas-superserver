@@ -98,7 +98,7 @@ function compute(data) {
 
 // ---------- GitHub sync ----------
 function ghDefaults() {
-  const h = location.hostname; let owner = 'conradcsoares', repo = 'customs-league'; // fallback when not on github.io
+  const h = location.hostname; let owner = 'conradcsoares', repo = 'gragas-superserver'; // fallback when not on github.io
   if (h.endsWith('.github.io')) {
     owner = h.split('.')[0];
     const seg = location.pathname.split('/').filter(Boolean)[0];
@@ -106,7 +106,8 @@ function ghDefaults() {
   }
   return { owner, repo, branch: 'main', path: 'data/league.json', token: '' };
 }
-const ghCfg = () => ({ ...ghDefaults(), ...(store.get(LS.gh) || {}) });
+// Repo comes from the site's own address; only the key is saved on the device (so a repo rename can't break publishing).
+const ghCfg = () => ({ ...ghDefaults(), token: (store.get(LS.gh) || {}).token || '' });
 const ghReady = (c = ghCfg()) => !!(c.owner && c.repo && c.token);
 
 async function ghRequest(method, c, body) {
@@ -143,7 +144,7 @@ async function publish() {
     S.base = hash(canon(text)); S.dirty = false; S.remoteChanged = false; store.del(LS.draft);
     toast('Published! The live site updates in about a minute.');
   } catch (e) {
-    if (e.status === 401) { store.set(LS.gh, { ...c, token: '' }); S.askKey = true; toast('Your GitHub key expired or was revoked — paste a new one.', true); }
+    if (e.status === 401) { store.set(LS.gh, { token: '' }); S.askKey = true; toast('Your GitHub key expired or was revoked — paste a new one.', true); }
     else if (e.status === 403 || e.status === 404) { S.askKey = 'perm'; window.scrollTo({ top: 0, behavior: 'smooth' }); }
     else toast(`Publish failed — ${e.message}`, true);
   }
@@ -644,7 +645,7 @@ document.addEventListener('click', async e => {
       const c = { ...ghCfg(), token };
       try { await ghFetchFile(c); }
       catch (err) { return toast(err.status === 401 ? 'That key didn’t work — check you copied all of it.' : `Couldn't connect — ${err.message}`, true); }
-      store.set(LS.gh, c); S.askKey = false;
+      store.set(LS.gh, { token }); S.askKey = false;
       publish();
       break;
     }
