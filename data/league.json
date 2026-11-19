@@ -4,5 +4,66 @@
     "leagueName": "Customs League",
     "region": "na"
   },
-  "games": []
+  "games": [
+    {
+      "id": "gmwnvf6wqghygi",
+      "date": "2026-11-19",
+      "blue": [
+        "Freljordbeast99#FUN",
+        "Jola#ten",
+        "ArsDerps#NA1",
+        "Borfo#NA1",
+        "leafeon#00000"
+      ],
+      "red": [
+        "TokyoFlavor#NA1",
+        "Doc Frungus#Na1",
+        "bladdeey#drain",
+        "Karna#0322",
+        "haeyoon#slvr"
+      ],
+      "winner": "blue",
+      "series": "smwnvf6wqoq2tt"
+    },
+    {
+      "id": "gmwnvf6wqwv4t1",
+      "date": "2026-11-19",
+      "blue": [
+        "Freljordbeast99#FUN",
+        "Jola#ten",
+        "ArsDerps#NA1",
+        "Borfo#NA1",
+        "leafeon#00000"
+      ],
+      "red": [
+        "TokyoFlavor#NA1",
+        "Doc Frungus#Na1",
+        "bladdeey#drain",
+        "Karna#0322",
+        "haeyoon#slvr"
+      ],
+      "winner": "red",
+      "series": "smwnvf6wqoq2tt"
+    },
+    {
+      "id": "gmwnvf6wq2djn1",
+      "date": "2026-11-19",
+      "blue": [
+        "Freljordbeast99#FUN",
+        "Jola#ten",
+        "ArsDerps#NA1",
+        "Borfo#NA1",
+        "leafeon#00000"
+      ],
+      "red": [
+        "TokyoFlavor#NA1",
+        "Doc Frungus#Na1",
+        "bladdeey#drain",
+        "Karna#0322",
+        "haeyoon#slvr"
+      ],
+      "winner": "blue",
+      "series": "smwnvf6wqoq2tt"
+    }
+  ]
 }
