@@ -17,6 +17,8 @@ const RANKS = [
   { name: 'Ayanokoji', color: '#f0c75e' },
 ];
 const MID = 3;
+// Group-voted awards per game: MVP (winning team) gains ×1.5, ACE (losing team) loses ÷1.5.
+const AWARD = 1.5;
 const rankFor = r => RANKS[Math.max(0, Math.min(RANKS.length - 1, MID + Math.floor((r - (START - 50)) / 100)))];
 const rankFloor = i => (i === 0 ? null : START - 50 + (i - MID) * 100);
 const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin' };
@@ -88,7 +90,12 @@ function compute(data) {
     const dBlue = Math.round(K * ((g.winner === 'blue' ? 1 : 0) - expBlue));
     deltas[g.id] = { blue: dBlue, red: -dBlue };
     for (const [team, d, won] of [[blue, dBlue, g.winner === 'blue'], [red, -dBlue, g.winner === 'red']]) {
-      for (const p of team) { p.rating += d; p.last = d; p.seen = n; won ? p.wins++ : p.losses++; }
+      const award = won ? g.mvp : g.ace;
+      const awardKey = award ? keyOf(resolveWith(links, award)) : null;
+      for (const p of team) {
+        const dp = keyOf(p.id) === awardKey ? Math.round(won ? d * AWARD : d / AWARD) : d;
+        p.rating += dp; p.last = dp; p.seen = n; won ? p.wins++ : p.losses++;
+      }
     }
   }
   for (const l of data.links || []) { const p = P[keyOf(resolveWith(links, l.main))]; if (p) p.alts.push(l.alt); }
@@ -241,6 +248,17 @@ function groupGames() {
   return out;
 }
 
+function awardsLine(games) {
+  const nm = id => esc((S.stats.P[keyOf(resolveId(id))]?.id || id).split('#')[0]);
+  const tag = i => (games.length > 1 ? ` <span class="dim">G${i + 1}</span>` : '');
+  const parts = [];
+  games.forEach((g, i) => {
+    if (g.mvp) parts.push(`<span class="mvp">★ MVP ${nm(g.mvp)}</span>${tag(i)}`);
+    if (g.ace) parts.push(`<span class="ace">◆ ACE ${nm(g.ace)}</span>${tag(i)}`);
+  });
+  return parts.length ? `<div class="meta awards">${parts.join(' · ')}</div>` : '';
+}
+
 function viewGames() {
   const { deltas, P } = S.stats;
   const groups = groupGames();
@@ -260,7 +278,8 @@ function viewGames() {
       return `<div class="game"><div class="teams">
           <div class="side">${tie ? `<b>Tied${score}</b>` : `<b class="pos">Won${score}</b>`} · ${names(g0[top])}</div>
           <div class="side muted">${tie ? `Tied${score}` : `Lost${n > 1 ? ` ${lw}–${tw}` : ''}`} · ${names(g0[bot])}</div>
-          <div class="meta">${n > 1 ? `${n} games · ` : ''}${fmtDate(g0.date)} · ${signed(net)} / ${signed(-net)}</div></div>
+          <div class="meta">${n > 1 ? `${n} games · ` : ''}${fmtDate(g0.date)} · ${signed(net)} / ${signed(-net)}</div>
+          ${awardsLine(gr.games)}</div>
         ${canEdit() ? `<div class="right"><button class="x" data-act="rematch" data-ids="${esc(ids)}" title="Record more games with these teams">Rematch</button>
           <button class="x" data-act="edit" data-ids="${esc(ids)}">Edit</button>
           <button class="x" data-act="delete" data-ids="${esc(ids)}" title="Delete">✕</button></div>` : ''}</div>`;
@@ -276,6 +295,7 @@ function emptyForm(teams) {
   return { editIds: [], date: today(), blue: teams ? [...teams.blue] : [], red: teams ? [...teams.red] : [], results: [], active: 'blue' };
 }
 const saveFormState = () => store.set(LS.form, S.form);
+const awardOf = (f, i) => ((f.awards || (f.awards = []))[i] || (f.awards[i] = { mvp: '', ace: '' }));
 function fixActive(f) { if (f[f.active].length >= 5 && f[other(f.active)].length < 5) f.active = other(f.active); }
 function pick(id) {
   const f = S.form;
@@ -326,11 +346,17 @@ function viewForm() {
         <button class="btn" data-act="add-new">Add</button></div>
     </div>
 
-    <h3 class="sub">Who won? <span class="muted">Tap once per game — Bo3? tap three times.</span></h3>
+    <h3 class="sub">Who won? <span class="muted">Tap once per game — Bo3? tap three times. Then pick the group's MVP and ACE (optional).</span></h3>
     <div class="winner"><button class="btn blue" data-act="result" data-side="blue">${TEAM.blue} won</button>
       <button class="btn red" data-act="result" data-side="red">${TEAM.red} won</button></div>
-    ${n ? `<div class="results">${f.results.map((r, i) => `<button class="res ${r}" data-act="unresult" data-i="${i}" title="Remove game ${i + 1}">G${i + 1} · ${TEAM[r]} <span class="rm">✕</span></button>`).join('')}
-      ${n > 1 ? `<span class="small muted">${TEAM.blue} ${bw}–${rw} ${TEAM.red}</span>` : ''}</div>` : ''}
+    ${n ? `<div class="results-list">${f.results.map((r, i) => {
+      const a = awardOf(f, i);
+      const opts = (list, sel) => '<option value="">—</option>' + list.map(id => `<option value="${esc(id)}" ${sel && keyOf(id) === keyOf(sel) ? 'selected' : ''}>${esc(id.split('#')[0])}</option>`).join('');
+      return `<div class="result-row"><button class="res ${r}" data-act="unresult" data-i="${i}" title="Remove game ${i + 1}">G${i + 1} · ${TEAM[r]} won <span class="rm">✕</span></button>
+        <label class="aw mvp">★ MVP <select data-award="mvp" data-i="${i}" aria-label="Game ${i + 1} MVP">${opts(f[r], a.mvp)}</select></label>
+        <label class="aw ace">◆ ACE <select data-award="ace" data-i="${i}" aria-label="Game ${i + 1} ACE">${opts(f[other(r)], a.ace)}</select></label></div>`;
+    }).join('')}
+      ${n > 1 ? `<div class="small muted" style="margin-top:6px">${TEAM.blue} ${bw}–${rw} ${TEAM.red}</div>` : ''}</div>` : ''}
     <div class="row end" style="margin-top:14px"><button class="btn" data-act="cancel">Cancel</button>
       <button class="btn gold" data-act="save">${n > 1 ? `Save ${n} games` : 'Save game'}</button></div>
   </div>`;
@@ -342,7 +368,12 @@ function saveForm() {
   if (!f.results.length) return toast('Tap who won each game.', true);
   const mk = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const series = f.results.length > 1 ? mk('s') : null;
-  const games = f.results.map(w => ({ id: mk('g'), date: f.date || today(), blue: [...f.blue], red: [...f.red], winner: w, ...(series ? { series } : {}) }));
+  const onSide = (side, id) => id && f[side].some(x => keyOf(x) === keyOf(id));
+  const games = f.results.map((w, i) => {
+    const a = awardOf(f, i);
+    return { id: mk('g'), date: f.date || today(), blue: [...f.blue], red: [...f.red], winner: w, ...(series ? { series } : {}),
+      ...(onSide(w, a.mvp) ? { mvp: a.mvp } : {}), ...(onSide(other(w), a.ace) ? { ace: a.ace } : {}) };
+  });
   const editIds = f.editIds;
   S.form = null; store.del(LS.form);
   commit(d => {
@@ -487,7 +518,7 @@ function applyShots(shots) {
     const id = matchPlayer(n, taken);
     if (id) { taken.add(keyOf(resolveId(id))); team[side].push(id); } else f.pending.push({ side, name: n });
   }
-  Object.assign(f, { blue: team.blue, red: team.red, results: [], active: 'blue' });
+  Object.assign(f, { blue: team.blue, red: team.red, results: [], awards: [], active: 'blue' });
   if (first.date) f.date = first.date;
   const overlap = (a, b) => a.filter(x => b.some(y => nameSim(x, y) >= 0.67)).length;
   shots.forEach((s, i) => {
@@ -611,13 +642,13 @@ document.addEventListener('click', async e => {
     case 'result':
       if (S.form.results.length >= 7) return toast('Max 7 games at once.', true);
       S.form.results.push(a.dataset.side); saveFormState(); render(); break;
-    case 'unresult': S.form.results.splice(Number(a.dataset.i), 1); saveFormState(); render(); break;
+    case 'unresult': S.form.results.splice(Number(a.dataset.i), 1); (S.form.awards || []).splice(Number(a.dataset.i), 1); saveFormState(); render(); break;
     case 'save': saveForm(); break;
     case 'rematch': case 'edit': {
       const games = gamesByIds(a.dataset.ids.split(','));
       if (!games.length) break;
       S.form = emptyForm(games[0]);
-      if (act === 'edit') Object.assign(S.form, { editIds: games.map(g => g.id), date: games[0].date, results: games.map(g => g.winner) });
+      if (act === 'edit') Object.assign(S.form, { editIds: games.map(g => g.id), date: games[0].date, results: games.map(g => g.winner), awards: games.map(g => ({ mvp: g.mvp || '', ace: g.ace || '' })) });
       saveFormState(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
       break;
     }
@@ -656,6 +687,7 @@ document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'newPlayer') el.classList.remove('bad');
   if (S.form && el.dataset.f === 'date') { S.form.date = el.value; saveFormState(); }
+  if (S.form && el.dataset.award) { awardOf(S.form, Number(el.dataset.i))[el.dataset.award] = el.value; saveFormState(); }
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;

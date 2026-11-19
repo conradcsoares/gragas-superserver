@@ -19,6 +19,7 @@ Riot's API doesn't return custom games, apart from tournament-code games, which 
 - Everyone starts at 1000.
 - Each team's strength is the average rating of its players. The expected result is `1 / (1 + 10^((theirs − ours)/400))`.
 - Every player on a team gains or loses `200 × (result − expected)`, so an even game is about ±100. The K is high on purpose because not many customs get played. Beating a stronger team pays more, and losing to a weaker team costs more.
+- **MVP / ACE:** for each game you can pick the group's MVP (winning team) and ACE (losing team). The MVP gains ×1.5, and the ACE loses ÷1.5.
 - Ratings are recomputed from the full game list, so editing or deleting an old game is always safe.
 
 ## Setup (about 5 minutes)
