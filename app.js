@@ -135,6 +135,7 @@ async function publish() {
     toast('Published! The live site updates in about a minute.');
   } catch (e) {
     if (e.status === 401) { store.set(LS.gh, { ...c, token: '' }); S.askKey = true; toast('Your GitHub key expired or was revoked — paste a new one.', true); }
+    else if (e.status === 403 || e.status === 404) { S.askKey = 'perm'; window.scrollTo({ top: 0, behavior: 'smooth' }); }
     else toast(`Publish failed — ${e.message}`, true);
   }
   finally { S.busy = false; render(); }
@@ -339,12 +340,23 @@ function saveForm() {
 
 // Shown only the first time someone presses Publish on a device.
 function viewKeyBox() {
+  const repo = esc(ghCfg().repo);
+  if (S.askKey === 'perm') return `<div class="card" id="keybox"><h2>Your key can't save yet</h2>
+    <p class="hint" style="margin-top:0">GitHub accepted the key, but it isn't allowed to change files. Fix the same key — no need to make a new one:</p>
+    <ol class="hint">
+      <li>Open <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:var(--gold)">GitHub → your fine-grained tokens</a> and click your key.</li>
+      <li>Click <b>Edit</b>. Repository access: <b>Only select repositories</b> → <b>${repo}</b>.</li>
+      <li>Under <b>Permissions</b>, click <b>+ Add permissions</b> → <b>Contents</b>, then change its dropdown to <b>Read and write</b>. Click <b>Update</b>.</li>
+      <li>Come back and press <b>Try again</b>.</li></ol>
+    <div class="row end"><button class="btn" data-act="new-key">Use a different key</button><button class="btn gold" data-act="retry-publish">Try again</button></div>
+  </div>`;
   return `<div class="card" id="keybox"><h2>One-time setup to publish</h2>
     <p class="hint" style="margin-top:0">To save games for everyone, this device needs a GitHub key. You only do this once.</p>
     <ol class="hint">
       <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--gold)">GitHub → new fine-grained token</a>.</li>
       <li>Repository access: <b>Only select repositories</b> → <b>${esc(ghCfg().repo)}</b>.</li>
-      <li>Permissions → <b>Contents: Read and write</b>. Generate it and paste it here.</li></ol>
+      <li>Under <b>Permissions</b>, click <b>+ Add permissions</b> → <b>Contents</b>, then change its dropdown to <b>Read and write</b>.</li>
+      <li>Click <b>Generate token</b>, copy it and paste it here.</li></ol>
     <input id="ghToken" type="password" placeholder="Paste key: github_pat_…" autocomplete="off">
     <div class="row end"><button class="btn" data-act="cancel-key">Cancel</button><button class="btn gold" data-act="save-key">Save &amp; publish</button></div>
   </div>`;
@@ -399,6 +411,8 @@ document.addEventListener('click', async e => {
       if (confirm('Throw away your unpublished changes?')) { store.del(LS.draft); load(); }
       break;
     case 'cancel-key': S.askKey = false; render(); break;
+    case 'retry-publish': S.askKey = false; publish(); break;
+    case 'new-key': S.askKey = true; render(); setTimeout(() => $('#ghToken')?.focus(), 50); break;
     case 'save-key': {
       const token = $('#ghToken').value.trim();
       if (!token) return toast('Paste your GitHub key first.', true);
