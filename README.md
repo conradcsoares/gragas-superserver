@@ -3,6 +3,7 @@
 A simple Elo ladder for our 5v5 League of Legends custom games. It's a static site (plain HTML/CSS/JS, no build step) that runs free on GitHub Pages.
 
 - One page: the ladder, a **+ Record game** button and the last few games.
+- **Screenshot import:** in the record form, tap **📷 From screenshots** and pick the post-game Scoreboard screenshots (a whole Bo3 at once), or paste one. The site reads the names, the winner and the date in your browser and fills the form for you to check. Names are matched to known players; new players just need their `#TAG` once.
 - **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
 - Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
 - Anyone who plays a recorded game joins the ladder automatically, starting at **1000**.

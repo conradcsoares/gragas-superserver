@@ -54,7 +54,7 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
+const S = { importing: null, data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
 
 function normalize(d) {
   d = d && typeof d === 'object' ? d : {};
@@ -296,10 +296,16 @@ function viewForm() {
   return `<div class="card form">
     <div class="row" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">${f.editIds.length ? 'Edit' : 'Record games'}</h2>
       <input type="date" data-f="date" value="${esc(f.date)}" style="width:auto;margin:0"></div>
-    ${!f.editIds.length && last ? `<div class="row" style="margin-bottom:12px">
-      <button class="btn sm" data-act="last-teams">↺ Same teams as last game</button>
-      ${f.blue.length || f.red.length ? '<button class="btn sm" data-act="swap">⇄ Swap</button><button class="btn sm" data-act="clear-teams">Clear</button>' : ''}</div>` : ''}
+    ${!f.editIds.length ? `<div class="row" style="margin-bottom:6px">
+      <button class="btn sm gold" data-act="shots" ${S.importing ? 'disabled' : ''}>📷 From screenshots</button>
+      ${last ? '<button class="btn sm" data-act="last-teams">↺ Same teams as last game</button>' : ''}
+      ${f.blue.length || f.red.length ? '<button class="btn sm" data-act="swap">⇄ Swap</button><button class="btn sm" data-act="clear-teams">Clear</button>' : ''}</div>
+      <p class="hint" style="margin:0 0 12px">${S.importing ? `⏳ ${S.importing}` : 'Pick the post-game Scoreboard screenshots (a whole Bo3 at once works), or paste one with Ctrl/⌘+V.'}</p>` : ''}
     <div class="tboxes">${team('blue')}${team('red')}</div>
+    ${(f.pending || []).length ? `<div class="pending"><div class="small" style="margin:10px 0 6px"><b>New players</b> <span class="muted">— screenshots don’t show tags, so add theirs once:</span></div>
+      ${f.pending.map((p, i) => `<div class="row nowrap" style="margin-bottom:6px"><span class="small ${p.side}-t" style="width:52px;flex-shrink:0">${TEAM[p.side]}</span>
+        <input data-pending="${i}" value="${esc(p.name)}#" autocomplete="off" spellcheck="false" style="margin:0">
+        <button class="btn sm" data-act="add-pending" data-i="${i}">Add</button></div>`).join('')}</div>` : ''}
 
     <div class="pool">
       <div class="small muted" style="margin-bottom:6px">${pool.length ? `Tap a player to add them to <b class="${f.active}-t">${TEAM[f.active]}</b>` : P && Object.keys(P).length ? 'Everyone is on a team.' : 'Add players by Riot ID — next time they’ll be one tap away.'}</div>
@@ -339,6 +345,179 @@ function saveForm() {
 }
 
 // Shown only the first time someone presses Publish on a device.
+// ----- screenshot import: read the League post-game scoreboard in the browser (Tesseract OCR) -----
+// Layout (as fractions of the screenshot): result + date top-left, the 10 names in one column
+// (team 1 above the "K / D / A" team-2 header line, team 2 below). The screenshot owner's row has gold stats,
+// which tells us whose VICTORY/DEFEAT it is.
+const OCR_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+let ocrWorker = null;
+async function getOcr() {
+  if (ocrWorker) return ocrWorker;
+  if (!window.Tesseract) {
+    await new Promise((res, rej) => {
+      const s = Object.assign(document.createElement('script'), { src: OCR_SRC, onload: res, onerror: () => rej(new Error('could not load the text reader')) });
+      document.head.appendChild(s);
+    });
+  }
+  ocrWorker = await Tesseract.createWorker('eng');
+  return ocrWorker;
+}
+function loadImage(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('that file isn’t an image')); };
+    img.src = url;
+  });
+}
+// Crop a region, upscale, and turn light-on-dark text into black-on-white for the OCR.
+function prep(img, x0, y0, x1, y1, scale = 2.5, thr = 110) {
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const sx = Math.round(x0 * W), sy = Math.round(y0 * H), sw = Math.round((x1 - x0) * W), sh = Math.round((y1 - y0) * H);
+  const c = document.createElement('canvas');
+  c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) {
+    const v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2] > thr ? 0 : 255;
+    p[i] = p[i + 1] = p[i + 2] = v;
+  }
+  ctx.putImageData(d, 0, 0);
+  return { canvas: c, sy, scale };
+}
+// How much gold text is in a row's stats columns (the screenshot owner's row is gold).
+function goldIn(img, y) {
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const c = document.createElement('canvas'), w = Math.round(0.26 * W), h = Math.round(0.035 * H);
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, Math.round(0.49 * W), Math.round(y - h / 2), w, h, 0, 0, w, h);
+  const p = ctx.getImageData(0, 0, w, h).data;
+  let n = 0;
+  for (let i = 0; i < p.length; i += 4) if (p[i] > 170 && p[i + 1] > 130 && p[i + 2] < 120 && p[i] - p[i + 2] > 80) n++;
+  return n;
+}
+const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+function lev(a, b) {
+  const d = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+  }
+  return d[b.length];
+}
+const nameSim = (a, b) => { a = normName(a); b = normName(b); return a && b ? 1 - lev(a, b) / Math.max(a.length, b.length) : 0; };
+
+async function readShot(file) {
+  const img = await loadImage(file);
+  const worker = await getOcr();
+  await worker.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
+  // Header: VICTORY / DEFEAT and the date
+  const head = prep(img, 0.05, 0, 0.5, 0.13, 2, 120);
+  const headText = (await worker.recognize(head.canvas)).data.text;
+  const result = /vict/i.test(headText) ? 'win' : /defe|feat/i.test(headText) ? 'loss' : null;
+  const dm = headText.match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/);
+  let date = null;
+  if (dm) {
+    let [, a, b, y] = dm.map(Number);
+    if (a > 12) [a, b] = [b, a]; // day/month locales
+    if (a >= 1 && a <= 12 && b >= 1 && b <= 31) date = `${y}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`;
+  }
+  // Names column
+  const col = prep(img, 0.128, 0.27, 0.285, 0.93);
+  const lines = (await worker.recognize(col.canvas)).data.lines || [];
+  const rows = [];
+  for (const ln of lines) {
+    const raw = ln.text.trim();
+    const y = col.sy + ((ln.bbox.y0 + ln.bbox.y1) / 2) / col.scale;
+    if (/\d+\s*[\/|]\s*\d+/.test(raw) && !/[a-z]{3}/i.test(raw)) { rows.push({ sep: true, y }); continue; }
+    const name = raw.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '').replace(/\s{2,}/g, ' ').trim();
+    if (normName(name).length >= 2) rows.push({ name, y });
+  }
+  const names = rows.filter(r => !r.sep);
+  let split = rows.findIndex((r, i) => r.sep && rows.slice(0, i).some(x => !x.sep));
+  let t1, t2;
+  if (split >= 0) { t1 = rows.slice(0, split).filter(r => !r.sep); t2 = rows.slice(split + 1).filter(r => !r.sep); }
+  else if (names.length === 10) { t1 = names.slice(0, 5); t2 = names.slice(5); }
+  else { // split at the biggest vertical gap
+    let gi = 1, gmax = -1;
+    for (let i = 1; i < names.length; i++) { const g = names[i].y - names[i - 1].y; if (g > gmax) { gmax = g; gi = i; } }
+    t1 = names.slice(0, gi); t2 = names.slice(gi);
+  }
+  t1 = t1.slice(0, 5); t2 = t2.slice(0, 5);
+  // Whose screenshot is it? The row with the most gold.
+  const scored = [...t1.map(r => ({ side: 'blue', g: goldIn(img, r.y) })), ...t2.map(r => ({ side: 'red', g: goldIn(img, r.y) }))].sort((a, b) => b.g - a.g);
+  const owner = scored.length > 1 && scored[0].g > 40 && scored[0].g > 2 * scored[1].g ? scored[0].side : null;
+  const winner = owner && result ? (result === 'win' ? owner : other(owner)) : null;
+  return { blue: t1.map(r => r.name), red: t2.map(r => r.name), winner, date };
+}
+
+// Match OCR'd names to known players (Riot game name, ignoring case/spaces/symbols).
+function matchPlayer(name, taken) {
+  let best = null, bs = 0;
+  for (const p of Object.values(S.stats.P)) {
+    if (taken.has(keyOf(p.id))) continue;
+    const s = nameSim(name, p.id.split('#')[0]);
+    if (s > bs) { bs = s; best = p; }
+  }
+  return bs >= 0.67 ? best.id : null;
+}
+function applyShots(shots) {
+  const f = S.form, warn = [];
+  const first = shots.find(s => s.blue.length && s.red.length);
+  if (!first) { toast('Couldn’t find player names — use the post-game Scoreboard tab.', true); return; }
+  const taken = new Set(), team = { blue: [], red: [] };
+  f.pending = [];
+  for (const side of ['blue', 'red']) for (const n of first[side]) {
+    const id = matchPlayer(n, taken);
+    if (id) { taken.add(keyOf(id)); team[side].push(id); } else f.pending.push({ side, name: n });
+  }
+  Object.assign(f, { blue: team.blue, red: team.red, results: [], active: 'blue' });
+  if (first.date) f.date = first.date;
+  const overlap = (a, b) => a.filter(x => b.some(y => nameSim(x, y) >= 0.67)).length;
+  shots.forEach((s, i) => {
+    const same = overlap(s.blue, first.blue) + overlap(s.red, first.red);
+    const swapped = overlap(s.blue, first.red) + overlap(s.red, first.blue);
+    if (Math.max(same, swapped) < 6) { warn.push(`screenshot ${i + 1} has different teams — record it separately`); return; }
+    if (!s.winner) { warn.push(`couldn’t tell who won screenshot ${i + 1} — tap the winner`); return; }
+    f.results.push(swapped > same ? other(s.winner) : s.winner);
+  });
+  saveFormState(); render();
+  const found = f.blue.length + f.red.length;
+  const msg = [`Read ${shots.length} screenshot${shots.length > 1 ? 's' : ''}: ${found} players matched, ${f.results.length} result${f.results.length === 1 ? '' : 's'}.`];
+  if (f.pending.length) msg.push(`${f.pending.length} new — add their #TAG.`);
+  msg.push(...warn);
+  toast(msg.join(' '), !!warn.length);
+}
+async function importShots(fileList) {
+  const files = [...fileList].filter(x => x.type.startsWith('image/')).slice(0, 7);
+  if (!files.length || !S.form) return;
+  const shots = [];
+  try {
+    for (let i = 0; i < files.length; i++) {
+      S.importing = i === 0 && !ocrWorker ? 'Loading the screenshot reader (first time takes a few seconds)…' : `Reading screenshot ${i + 1} of ${files.length}…`;
+      render();
+      shots.push(await readShot(files[i]));
+    }
+    S.importing = null;
+    applyShots(shots);
+  } catch (e) {
+    S.importing = null; render();
+    toast(`Couldn’t read the screenshot — ${e.message}`, true);
+  }
+}
+function addPending(i) {
+  const f = S.form, p = f.pending[i], el = document.querySelector(`input[data-pending="${i}"]`);
+  const id = parseRiotId(el.value);
+  if (!id) { el.classList.add('bad'); return toast('Add their tag: Name#TAG', true); }
+  if (f[p.side].length >= 5) return toast(`${TEAM[p.side]} is full.`, true);
+  f.pending.splice(i, 1);
+  f.active = p.side;
+  pick(S.stats.P[keyOf(id)]?.id || id);
+}
+
 function viewKeyBox() {
   const repo = esc(ghCfg().repo);
   if (S.askKey === 'perm') return `<div class="card" id="keybox"><h2>Your key can't save yet</h2>
@@ -380,6 +559,8 @@ document.addEventListener('click', async e => {
       S.form[side] = S.form[side].filter(x => x !== id); S.form.active = side; saveFormState(); render(); break;
     }
     case 'add-new': addNew(); break;
+    case 'shots': $('#shotFile').click(); break;
+    case 'add-pending': addPending(Number(a.dataset.i)); break;
     case 'last-teams': {
       const g = S.stats.ordered[S.stats.ordered.length - 1];
       Object.assign(S.form, { blue: [...g.blue], red: [...g.red] }); saveFormState(); render(); break;
@@ -434,7 +615,15 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   if (e.target.id === 'newPlayer') { e.preventDefault(); addNew(); }
+  if (e.target.dataset?.pending != null) { e.preventDefault(); addPending(Number(e.target.dataset.pending)); }
   if (e.target.id === 'ghToken') { e.preventDefault(); $('[data-act=save-key]').click(); }
+});
+
+$('#shotFile').addEventListener('change', e => { const files = [...e.target.files]; e.target.value = ''; importShots(files); });
+document.addEventListener('paste', e => {
+  if (!S.form) return;
+  const files = [...(e.clipboardData?.files || [])].filter(x => x.type.startsWith('image/'));
+  if (files.length) { e.preventDefault(); importShots(files); }
 });
 
 load();
