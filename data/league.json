@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "settings": {
+    "leagueName": "Customs League",
+    "season": "Season 1",
+    "startRating": 1000,
+    "kFactor": 32,
+    "placementGames": 5,
+    "placementK": 48
+  },
+  "players": [],
+  "matches": []
+}
