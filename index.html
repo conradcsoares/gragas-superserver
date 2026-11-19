@@ -8,37 +8,30 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 2 36 11v18L20 38 4 29V11Z' fill='%23c8aa6e'/%3E%3Cpath d='M20 9 29 14v12l-9 5-9-5V14Z' fill='%230a0e17'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="wrap top-inner">
-      <a class="brand" href="#/">
-        <svg viewBox="0 0 40 40" width="34" height="34" aria-hidden="true">
+  <div id="banner"></div>
+  <main class="wrap">
+    <header class="head">
+      <div class="brand">
+        <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true">
           <path d="M20 2 36 11v18L20 38 4 29V11Z" fill="none" stroke="#c8aa6e" stroke-width="2"/>
           <path d="M20 9 29 14v12l-9 5-9-5V14Z" fill="#c8aa6e"/>
         </svg>
-        <span>
-          <span class="brand-name" id="leagueName">Customs League</span>
-          <span class="brand-season" id="seasonName"></span>
-        </span>
-      </a>
-      <nav id="nav">
-        <a href="#/" data-route="leaderboard">Ladder</a>
-        <a href="#/matches" data-route="matches">Matches</a>
-        <a href="#/balance" data-route="balance">Team Builder</a>
-        <a href="#/add" data-route="add">+ Match</a>
-        <a href="#/admin" data-route="admin">Admin</a>
-      </nav>
-    </div>
-  </header>
-  <div id="banner"></div>
-  <main class="wrap" id="view"><div class="loading">Loading the Rift…</div></main>
+        <h1 id="leagueName">Customs League</h1>
+      </div>
+      <button class="btn gold" data-act="open-form">+ Record game</button>
+    </header>
+    <div id="view"><p class="muted center">Loading…</p></div>
+  </main>
   <footer class="wrap foot">
-    Customs League isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+    <button class="link" data-act="toggle-setup">Setup</button>
+    <p>Everyone starts at 1000. Win against a stronger team and you gain more; lose to a weaker one and you drop more.</p>
+    <p class="dim">Not endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.</p>
   </footer>
-  <datalist id="champList"></datalist>
+  <datalist id="playerList"></datalist>
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
