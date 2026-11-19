@@ -5,7 +5,20 @@
  * Ratings are recomputed from the full game list on every load. */
 
 const START = 1000;
-const K = 32;
+const K = 200; // an even match swings about ±100 — few customs get played, so ratings need to move fast
+// One rank per 100 points; 1000 sits in the middle of Mid.
+const RANKS = [
+  { name: 'Chud', color: '#8a6f5c' },
+  { name: 'Goober', color: '#b07d5a' },
+  { name: 'NPC', color: '#8f9bb0' },
+  { name: 'Mid', color: '#c9ccd4' },
+  { name: 'Cracked', color: '#4fc1b0' },
+  { name: 'Sigma', color: '#9b7bff' },
+  { name: 'Chad', color: '#f0c75e' },
+];
+const MID = 3;
+const rankFor = r => RANKS[Math.max(0, Math.min(RANKS.length - 1, MID + Math.floor((r - (START - 50)) / 100)))];
+const rankFloor = i => (i === 0 ? null : START - 50 + (i - MID) * 100);
 const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin' };
 // Only the owner edits. Visiting the site once with #admin unlocks editing on that device;
 // everyone else sees a read-only ladder.
@@ -196,10 +209,12 @@ function viewLadder() {
     <thead><tr><th class="rk">#</th><th>Player</th><th class="r">W–L</th><th class="r">Rating</th></tr></thead>
     <tbody>${ladder.map((p, i) => `<tr>
       <td class="rk">${i + 1}</td>
-      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="Open on op.gg">${nameHtml(p.id)}</a></td>
+      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="Open on op.gg">${nameHtml(p.id)}</a>
+        <span class="rank" style="--c:${rankFor(p.rating).color}">${rankFor(p.rating).name}</span></td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
       <td class="r num"><span class="rating">${p.rating}</span><span class="d ${p.last > 0 ? 'pos' : p.last < 0 ? 'neg' : 'dim'}">${signed(p.last)}</span></td>
-    </tr>`).join('')}</tbody></table></div>`;
+    </tr>`).join('')}</tbody></table>
+    <div class="legend">${RANKS.map((r, i) => `<span style="color:${r.color}">${r.name}${rankFloor(i) == null ? '' : ` ${rankFloor(i)}+`}</span>`).reverse().join('')}</div></div>`;
 }
 
 // Consecutive games sharing a series id (a Bo3 etc.) are shown as one row. Newest first.

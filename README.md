@@ -6,6 +6,7 @@ A simple Elo ladder for our 5v5 League of Legends custom games. It's a static si
 - **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
 - Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
 - Anyone who plays a recorded game joins the ladder automatically, starting at **1000**.
+- Every 100 points is a rank: **Chud** (<750) · **Goober** 750+ · **NPC** 850+ · **Mid** 950+ (start) · **Cracked** 1050+ · **Sigma** 1150+ · **Chad** 1250+.
 
 ## Why games are entered by hand
 
@@ -15,7 +16,7 @@ Riot's API doesn't return custom games, apart from tournament-code games, which 
 
 - Everyone starts at 1000.
 - Each team's strength is the average rating of its players. The expected result is `1 / (1 + 10^((theirs − ours)/400))`.
-- Every player on a team gains or loses `32 × (result − expected)`. Beating a stronger team pays more, and losing to a weaker team costs more.
+- Every player on a team gains or loses `200 × (result − expected)`, so an even game is about ±100. The K is high on purpose because not many customs get played. Beating a stronger team pays more, and losing to a weaker team costs more.
 - Ratings are recomputed from the full game list, so editing or deleting an old game is always safe.
 
 ## Setup (about 5 minutes)
