@@ -8,13 +8,13 @@ const START = 1000;
 const K = 200; // an even match swings about ±100 — few customs get played, so ratings need to move fast
 // One rank per 100 points; 1000 sits in the middle of Mid.
 const RANKS = [
-  { name: 'Chud', color: '#8a6f5c' },
-  { name: 'Goober', color: '#b07d5a' },
+  { name: 'Tool', color: '#8a6f5c' },
+  { name: 'Pawn', color: '#b07d5a' },
   { name: 'NPC', color: '#8f9bb0' },
-  { name: 'Mid', color: '#c9ccd4' },
-  { name: 'Cracked', color: '#4fc1b0' },
-  { name: 'Sigma', color: '#9b7bff' },
-  { name: 'Chad', color: '#f0c75e' },
+  { name: 'The Observer', color: '#c9ccd4' },
+  { name: 'Manipulator', color: '#4fc1b0' },
+  { name: 'Puppet Master', color: '#9b7bff' },
+  { name: 'Ayanokoji', color: '#f0c75e' },
 ];
 const MID = 3;
 const rankFor = r => RANKS[Math.max(0, Math.min(RANKS.length - 1, MID + Math.floor((r - (START - 50)) / 100)))];

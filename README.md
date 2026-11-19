@@ -6,7 +6,7 @@ A simple Elo ladder for our 5v5 League of Legends custom games. It's a static si
 - **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
 - Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
 - Anyone who plays a recorded game joins the ladder automatically, starting at **1000**.
-- Every 100 points is a rank: **Chud** (<750) · **Goober** 750+ · **NPC** 850+ · **Mid** 950+ (start) · **Cracked** 1050+ · **Sigma** 1150+ · **Chad** 1250+.
+- Every 100 points is a rank: **Tool** (<750) · **Pawn** 750+ · **NPC** 850+ · **The Observer** 950+ (start) · **Manipulator** 1050+ · **Puppet Master** 1150+ · **Ayanokoji** 1250+.
 
 ## Why games are entered by hand
 
