@@ -6,7 +6,10 @@
 
 const START = 1000;
 const K = 32;
-const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2' };
+const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin' };
+// Only the owner edits. Visiting the site once with #admin unlocks editing on that device;
+// everyone else sees a read-only ladder.
+if (location.hash === '#admin') { try { localStorage.setItem(LS.admin, '1'); } catch { /* ignore */ } history.replaceState(null, '', location.pathname + location.search); }
 const DEFAULTS = { leagueName: 'Customs League', region: 'na' };
 
 // ---------- utils ----------
@@ -176,8 +179,10 @@ function renderBanner() {
     <button class="btn sm" data-act="discard">Discard</button>
     <button class="btn sm gold" data-act="publish" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Publishing…' : 'Publish'}</button></div>`;
 }
+const canEdit = () => store.get(LS.admin) === 1 || !!ghCfg().token;
 function render() {
   const st = S.data.settings;
+  $('#recordBtn').hidden = !canEdit();
   $('#leagueName').textContent = st.leagueName;
   document.title = st.leagueName;
   renderBanner();
@@ -186,7 +191,7 @@ function render() {
 
 function viewLadder() {
   const { ladder } = S.stats, region = S.data.settings.region;
-  if (!ladder.length) return `<div class="card empty">No games yet. Hit <b>+ Record game</b> after your first custom.</div>`;
+  if (!ladder.length) return `<div class="card empty">No games yet.</div>`;
   return `<div class="card"><table class="ladder">
     <thead><tr><th class="rk">#</th><th>Player</th><th class="r">W–L</th><th class="r">Rating</th></tr></thead>
     <tbody>${ladder.map((p, i) => `<tr>
@@ -228,9 +233,9 @@ function viewGames() {
           <div class="side">${tie ? `<b>Tied${score}</b>` : `<b class="pos">Won${score}</b>`} · ${names(g0[top])}</div>
           <div class="side muted">${tie ? `Tied${score}` : `Lost${n > 1 ? ` ${lw}–${tw}` : ''}`} · ${names(g0[bot])}</div>
           <div class="meta">${n > 1 ? `${n} games · ` : ''}${fmtDate(g0.date)} · ${signed(net)} / ${signed(-net)}</div></div>
-        <div class="right"><button class="x" data-act="rematch" data-ids="${esc(ids)}" title="Record more games with these teams">Rematch</button>
+        ${canEdit() ? `<div class="right"><button class="x" data-act="rematch" data-ids="${esc(ids)}" title="Record more games with these teams">Rematch</button>
           <button class="x" data-act="edit" data-ids="${esc(ids)}">Edit</button>
-          <button class="x" data-act="delete" data-ids="${esc(ids)}" title="Delete">✕</button></div></div>`;
+          <button class="x" data-act="delete" data-ids="${esc(ids)}" title="Delete">✕</button></div>` : ''}</div>`;
     }).join('')}
     ${groups.length > 5 ? `<div class="row end" style="margin-top:8px"><button class="link" data-act="toggle-all">${S.showAll ? 'Show less' : `Show all ${groups.length}`}</button></div>` : ''}
   </div>`;

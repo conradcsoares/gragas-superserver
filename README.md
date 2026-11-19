@@ -26,7 +26,7 @@ Riot's API doesn't return custom games, apart from tournament-code games, which 
 
 ### Saving games
 
-Games are stored in `data/league.json` in the repo. Anyone can view the site. The first time someone presses **Publish** on a device, the site asks for a GitHub key:
+Games are stored in `data/league.json` in the repo. Visitors see a read-only ladder. To edit, open `https://conradcsoares.github.io/customs-league/#admin` once on your device. That unlocks **+ Record game** there. The first time you press **Publish**, the site asks for a GitHub key:
 
 1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Only select repositories** → this repo, and **Contents: Read and write**.
 2. Paste it into the box and click **Save & publish**. The live site updates in about a minute.
