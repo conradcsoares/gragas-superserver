@@ -8,15 +8,22 @@ const START = 1000;
 const K = 200; // an even match swings about ±100 — few customs get played, so ratings need to move fast
 // One rank per 100 points; 1000 sits in the middle of Mid.
 const RANKS = [
-  { name: 'Tool', color: '#8a6f5c' },
-  { name: 'Pawn', color: '#b07d5a' },
+  { name: 'Make-A-Wish Kid', color: '#9a6f86' },
+  { name: 'Wood', color: '#8b6b45' },
+  { name: 'Moron', color: '#a5773f' },
+  { name: 'Tool', color: '#b5835e' },
+  { name: 'Pawn', color: '#a8957f' },
+  { name: 'Peasant', color: '#929d7c' },
   { name: 'NPC', color: '#8f9bb0' },
   { name: 'The Observer', color: '#c9ccd4' },
   { name: 'Manipulator', color: '#4fc1b0' },
+  { name: 'Lone Wolf', color: '#5fa8e8' },
   { name: 'Puppet Master', color: '#9b7bff' },
+  { name: 'Mastermind', color: '#c86bf0' },
+  { name: 'Dark Triad', color: '#ef5a5f' },
   { name: 'Ayanokoji', color: '#f0c75e' },
 ];
-const MID = 3;
+const MID = 7; // The Observer (950–1049); 1000 sits in its middle
 // Group-voted awards per game: MVP (winning team) gains ×1.5, ACE (losing team) loses ÷1.5.
 const AWARD = 1.5;
 const rankFor = r => RANKS[Math.max(0, Math.min(RANKS.length - 1, MID + Math.floor((r - (START - 50)) / 100)))];
