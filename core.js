@@ -23,9 +23,14 @@ const RANKS = [
 const MID = 7; // The Observer (950–1049); 1000 sits in its middle
 // Group-voted awards per game: MVP (winning team) gains ×1.5, ACE (losing team) loses ÷1.5.
 const AWARD = 1.5;
-const rankIdx = r => Math.max(0, Math.min(RANKS.length - 1, MID + Math.floor((r - (START - 50)) / 100)));
+// The last rank (Ayanokoji) isn't earned by rating: it's a title held by whoever is #1 on the ladder.
+const CROWN = RANKS.length - 1;
+const rankIdx = r => Math.max(0, Math.min(CROWN - 1, MID + Math.floor((r - (START - 50)) / 100)));
 const rankFor = r => RANKS[rankIdx(r)];
-const rankFloor = i => (i === 0 ? null : START - 50 + (i - MID) * 100);
+// place = 0-based position on the ladder
+const rankOf = (rating, place) => (place === 0 ? CROWN : rankIdx(rating));
+const rankFloor = i => (i === 0 || i === CROWN ? null : START - 50 + (i - MID) * 100);
+const rankRange = i => (i === CROWN ? '#1 only' : i === 0 ? `under ${rankFloor(1)}` : `${rankFloor(i)}+`);
 
 const LEAGUE_NAME = 'Gragas Superserver';
 const DEFAULTS = { leagueName: LEAGUE_NAME, region: 'na' };

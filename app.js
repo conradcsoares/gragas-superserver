@@ -166,14 +166,14 @@ function viewLadder() {
     <thead><tr><th class="rk">#</th><th class="em"></th><th>Player</th><th class="r">W–L</th><th class="r">Rating</th></tr></thead>
     <tbody>${ladder.map((p, i) => `<tr>
       <td class="rk">${i + 1}</td>
-      <td class="em">${emblemSvg(rankIdx(p.rating))}</td>
+      <td class="em">${emblemSvg(rankOf(p.rating, i))}</td>
       <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="Open on op.gg">${nameHtml(p.id)}</a>
-        <span class="rank" style="--c:${rankFor(p.rating).color}">${rankFor(p.rating).name}</span>
+        <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a.split('#')[0])).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
       <td class="r num"><span class="rating">${p.rating}</span></td>
     </tr>`).join('')}</tbody></table>
-    <div class="legend">${RANKS.map((r, i) => `<span class="lg" style="color:${r.color}">${emblemSvg(i)}<span>${r.name}<small>${rankFloor(i) == null ? `under ${rankFloor(1)}` : `${rankFloor(i)}+`}</small></span></span>`).reverse().join('')}</div>
+    <div class="legend">${RANKS.map((r, i) => `<span class="lg" style="color:${r.color}">${emblemSvg(i)}<span>${r.name}<small>${rankRange(i)}</small></span></span>`).reverse().join('')}</div>
     ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Link alt accounts</button></div>' : ''}</div>`;
 }
 

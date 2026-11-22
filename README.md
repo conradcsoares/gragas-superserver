@@ -8,7 +8,7 @@ A simple Elo ladder for our 5v5 League of Legends custom games. It's a static si
 - **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
 - Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
 - Anyone who plays a recorded game joins the ladder automatically, starting at **1000**.
-- Every 100 points is a rank: **Make-A-Wish Kid** (<350) · **Wood** 350+ · **Moron** 450+ · **Tool** 550+ · **Pawn** 650+ · **Peasant** 750+ · **NPC** 850+ · **The Observer** 950+ (start) · **Manipulator** 1050+ · **Lone Wolf** 1150+ · **Puppet Master** 1250+ · **Mastermind** 1350+ · **Dark Triad** 1450+ · **Ayanokoji** 1550+. Each rank has its own emblem (`emblems.js`); the frame gets fancier as you climb.
+- Every 100 points is a rank: **Make-A-Wish Kid** (<350) · **Wood** 350+ · **Moron** 450+ · **Tool** 550+ · **Pawn** 650+ · **Peasant** 750+ · **NPC** 850+ · **The Observer** 950+ (start) · **Manipulator** 1050+ · **Lone Wolf** 1150+ · **Puppet Master** 1250+ · **Mastermind** 1350+ · **Dark Triad** 1450+. **Ayanokoji** isn't a rating band: it's the title held by whoever is #1 on the ladder. Each rank has its own emblem (`emblems.js`); the frame gets fancier as you climb.
 - **Trailer:** `trailer.html` is a 25-second hype trailer with sound, built from the live ladder (top 3, ranks, who holds the crown). **⬇ Save as video** records it to an MP4/WebM you can post in Discord.
 
 ## Why games are entered by hand

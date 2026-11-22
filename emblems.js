@@ -76,13 +76,13 @@ const EMBLEM_GLYPHS = [
     <path d="M32 46l-7-12h14z" fill="${c}"/>
     <circle cx="32" cy="12.5" r="4" fill="${c}"/><circle cx="51" cy="45.5" r="4" fill="${c}"/><circle cx="13" cy="45.5" r="4" fill="${c}"/>
     <circle cx="32" cy="12.5" r="1.4" fill="${EMBLEM_INK}"/><circle cx="51" cy="45.5" r="1.4" fill="${EMBLEM_INK}"/><circle cx="13" cy="45.5" r="1.4" fill="${EMBLEM_INK}"/>`,
-  // Ayanokoji: the crown
-  c => `<path d="M17 40l2-19 7.5 8.5L32 16l5.5 13.5L45 21l2 19z" fill="${c}"/>
-    <rect x="17" y="40.5" width="30" height="5.5" rx="1.5" fill="${c}"/>
-    <path d="M17 40.5h30" stroke="${EMBLEM_INK}" stroke-width="1" opacity=".4"/>
-    <circle cx="19" cy="20" r="2.2" fill="#fff"/><circle cx="32" cy="15" r="2.4" fill="#fff"/><circle cx="45" cy="20" r="2.2" fill="#fff"/>
-    <path d="M32 31l3 3.5-3 3.5-3-3.5z" fill="#d9344a"/>
-    <circle cx="23.5" cy="43.2" r="1.2" fill="${EMBLEM_INK}" opacity=".5"/><circle cx="40.5" cy="43.2" r="1.2" fill="${EMBLEM_INK}" opacity=".5"/>`,
+  // Ayanokoji (#1 only): a crowned, hooded figure in shadow, eyes barely open
+  c => `<path d="M23 18.5l1.5-7 4 4 3.5-6 3.5 6 4-4 1.5 7z" fill="${c}"/>
+    <circle cx="24.5" cy="11.5" r="1.3" fill="#fff"/><circle cx="32" cy="9.5" r="1.4" fill="#fff"/><circle cx="39.5" cy="11.5" r="1.3" fill="#fff"/>
+    <path d="M32 20.5c-8 0-12.5 6-12.5 13 0 3 .8 5.6 2 7.5-5 2-8 5.5-9 10.5h39c-1-5-4-8.5-9-10.5 1.2-1.9 2-4.5 2-7.5 0-7-4.5-13-12.5-13z" fill="${c}"/>
+    <path d="M32 24c-5.5 0-8.5 4.5-8.5 9.5 0 5 3.5 8.5 8.5 8.5s8.5-3.5 8.5-8.5c0-5-3-9.5-8.5-9.5z" fill="${EMBLEM_INK}"/>
+    <path d="M26.5 32.5h4.5M33 32.5h4.5" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M32 42v9.5M27 44l5 3 5-3" fill="none" stroke="${EMBLEM_INK}" stroke-width="1.2" opacity=".5"/>`,
 ];
 
 const hexPts = (r, cx = 32, cy = 32) =>
