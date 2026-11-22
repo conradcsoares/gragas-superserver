@@ -232,6 +232,27 @@
       "winner": "blue",
       "mvp": "Nomad#12121",
       "ace": "SPARKOFZAUN99#ZZZ"
+    },
+    {
+      "id": "gmwrhczg95v14u",
+      "date": "2026-11-22",
+      "blue": [
+        "Jerry#hey",
+        "Jola#ten",
+        "SPARKOFZAUN99#ZZZ",
+        "Borfo#NA1",
+        "ArsDerps#NA1"
+      ],
+      "red": [
+        "Freljordbeast99#FUN",
+        "Leonidas5052#0000",
+        "DookieDoggo#ded",
+        "Nomad#12121",
+        "WidePeepoTired#NA1"
+      ],
+      "winner": "red",
+      "mvp": "Nomad#12121",
+      "ace": "Jola#ten"
     }
   ],
   "links": [
@@ -239,5 +260,6 @@
       "alt": "Karna#0322",
       "main": "WidePeepoTired#NA1"
     }
-  ]
+  ],
+  "nicks": []
 }
