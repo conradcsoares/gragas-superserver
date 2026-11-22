@@ -36,6 +36,9 @@ const LEAGUE_NAME = 'Gragas Superserver';
 const DEFAULTS = { leagueName: LEAGUE_NAME, region: 'na' };
 
 const keyOf = id => id.toLowerCase().replace(/\s+/g, ''); // Riot IDs: ignore case + spaces
+const NICK_MAX = 20;
+// Name to show for a player: their nickname, else the game name without the #TAG.
+const displayName = p => p.nick || p.id.split('#')[0];
 
 function normalize(d) {
   d = d && typeof d === 'object' ? d : {};
@@ -45,6 +48,8 @@ function normalize(d) {
     games: (Array.isArray(d.games) ? d.games : []).filter(g => g && g.id && Array.isArray(g.blue) && Array.isArray(g.red) && ['blue', 'red'].includes(g.winner)),
     // Alt accounts: games keep the account actually played; ratings count toward the main player.
     links: (Array.isArray(d.links) ? d.links : []).filter(l => l && l.alt && l.main),
+    // Nicknames: shown instead of the Riot ID; the player is still that account (op.gg link, ratings).
+    nicks: (Array.isArray(d.nicks) ? d.nicks : []).filter(n => n && n.id && typeof n.nick === 'string' && n.nick.trim()),
   };
 }
 
@@ -76,6 +81,7 @@ function compute(data) {
     }
   }
   for (const l of data.links || []) { const p = P[keyOf(resolveWith(links, l.main))]; if (p) p.alts.push(l.alt); }
+  for (const n of data.nicks || []) { const p = P[keyOf(resolveWith(links, n.id))]; if (p) p.nick = n.nick.trim(); }
   const ladder = Object.values(P).sort((a, b) => b.rating - a.rating || b.wins - a.wins || a.id.localeCompare(b.id));
   return { P, deltas, ordered, ladder, links };
 }

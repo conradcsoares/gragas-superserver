@@ -39,8 +39,8 @@
   </div>
   <p class="note" id="note">Sound on.</p>
 
-  <script src="core.js?v=17"></script>
-  <script src="emblems.js?v=17"></script>
+  <script src="core.js?v=18"></script>
+  <script src="emblems.js?v=18"></script>
   <script>
   'use strict';
   const W = 1280, H = 720, LEN = 25;
@@ -133,7 +133,7 @@
     for (const h of HITS) if (t >= h) a = Math.max(a, Math.exp(-(t - h) * 7));
     return [Math.sin(t * 93) * a * 9, Math.cos(t * 71) * a * 7];
   }
-  const shortName = id => (id || '').split('#')[0];
+  const shortName = p => (p ? displayName(p) : '');
 
   // ---------- scenes ----------
   function frame(t) {
@@ -200,7 +200,7 @@
         const ri = rankOf(pl.rating, place - 1), col = RANKS[ri].color;
         text(`#${place}`, 330, 360, { size: 260 * (1.3 - 0.3 * easeOut(p)), font: 'Cinzel', alpha: a * 0.9, color: place === 1 ? '#f0c75e' : '#f0e6d2', glow: place === 1 ? 40 : 10, glowColor: '#c8aa6e' });
         const slide = (1 - easeOut(p)) * 80;
-        text(shortName(pl.id).toUpperCase(), 560 + slide, 300, { size: 88, align: 'left', alpha: a, color: '#fff', max: 660, track: 0.02 });
+        text(shortName(pl).toUpperCase(), 560 + slide, 300, { size: 88, align: 'left', alpha: a, color: '#fff', max: 660, track: 0.02 });
         icon(ri, 600 + slide, 420, 96, a, 18);
         text(RANKS[ri].name.toUpperCase(), 665 + slide, 405, { size: 34, weight: 800, align: 'left', alpha: a, color: col, track: 0.1, max: 520 });
         const shown = Math.round(START + (pl.rating - START) * easeOut(seg(lt, 0.1, 1.1)));
@@ -216,7 +216,7 @@
       text(`${stats.games} GAMES  ·  ${stats.ladder.length} PLAYERS`, W / 2, 230, { size: 40, weight: 800, alpha: seg(t, 19.0, 19.3) * (1 - out), color: '#8892a8', track: 0.2 });
       icon(CROWN, W / 2, 360, 140 * back(p), p * (1 - out), 50);
       if (king) {
-        text(`${shortName(king.id).toUpperCase()} WEARS THE CROWN.`, W / 2, 500, { size: 60, alpha: p * (1 - out), color: RANKS[CROWN].color, glow: 20 });
+        text(`${shortName(king).toUpperCase()} WEARS THE CROWN.`, W / 2, 500, { size: 60, alpha: p * (1 - out), color: RANKS[CROWN].color, glow: 20 });
         text('TAKE IT.', W / 2, 580, { size: 40, weight: 800, alpha: seg(t, 20.4, 20.7) * (1 - out), color: RANKS[CROWN - 1].color, track: 0.3, glow: 20 });
       } else {
         text('THE CROWN IS UNCLAIMED.', W / 2, 500, { size: 62, alpha: p * (1 - out), color: '#f0e6d2' });

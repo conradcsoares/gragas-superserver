@@ -136,6 +136,8 @@ function toast(msg, err = false) {
   const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ''; }, err ? 5000 : 2600);
 }
+// Short name for any account: the player's nickname if set, else the Riot game name.
+function dn(id) { const p = S.stats.P[keyOf(resolveId(id))]; return p ? displayName(p) : id.split('#')[0]; }
 function nameHtml(id) {
   const [n, t] = id.split('#');
   return `${esc(n)}<span class="tag">#${esc(t)}</span>`;
@@ -167,14 +169,14 @@ function viewLadder() {
     <tbody>${ladder.map((p, i) => `<tr>
       <td class="rk">${i + 1}</td>
       <td class="em">${emblemSvg(rankOf(p.rating, i))}</td>
-      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="Open on op.gg">${nameHtml(p.id)}</a>
+      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">${p.nick ? `${esc(p.nick)}<span class="riot">${esc(p.id)}</span>` : nameHtml(p.id)}</a>
         <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a.split('#')[0])).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
       <td class="r num"><span class="rating">${p.rating}</span></td>
     </tr>`).join('')}</tbody></table>
     <div class="legend">${RANKS.map((r, i) => `<span class="lg" style="color:${r.color}">${emblemSvg(i)}<span>${r.name}<small>${rankRange(i)}</small></span></span>`).reverse().join('')}</div>
-    ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Link alt accounts</button></div>' : ''}</div>`;
+    ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Nicknames &amp; alt accounts</button></div>' : ''}</div>`;
 }
 
 // Consecutive games sharing a series id (a Bo3 etc.) are shown as one row. Newest first.
@@ -189,7 +191,7 @@ function groupGames() {
 }
 
 function awardsLine(games) {
-  const nm = id => esc((S.stats.P[keyOf(resolveId(id))]?.id || id).split('#')[0]);
+  const nm = id => esc(dn(id));
   const tag = i => (games.length > 1 ? ` <span class="dim">G${i + 1}</span>` : '');
   const parts = [];
   games.forEach((g, i) => {
@@ -204,7 +206,7 @@ function viewGames() {
   const groups = groupGames();
   if (!groups.length) return '';
   const shown = S.showAll ? groups : groups.slice(0, 5);
-  const names = ids => ids.map(id => esc((P[keyOf(resolveId(id))]?.id || id).split('#')[0])).join(', ');
+  const names = ids => ids.map(id => esc(dn(id))).join(', ');
   return `<div class="card"><h2>Recent games</h2>
     ${shown.map(gr => {
       const g0 = gr.games[0], n = gr.games.length;
@@ -261,7 +263,7 @@ function viewForm() {
   const team = side => `<div class="tbox ${side} ${f.active === side ? 'active' : ''}" data-act="set-active" data-side="${side}">
       <div class="tbox-head"><h3>${TEAM[side]}</h3><span class="small muted">${f[side].length}/5</span></div>
       ${f[side].map(id => `<button class="mem" data-act="unpick" data-side="${side}" data-id="${esc(id)}" title="Remove">
-        <span class="nm">${esc(id.split('#')[0])}</span><span class="rm">✕</span></button>`).join('')}
+        <span class="nm">${esc(dn(id))}</span><span class="rm">✕</span></button>`).join('')}
       ${Array(Math.max(0, 5 - f[side].length)).fill('<div class="mem empty"></div>').join('')}</div>`;
   const bw = f.results.filter(r => r === 'blue').length, rw = f.results.length - bw;
   const n = f.results.length;
@@ -281,7 +283,7 @@ function viewForm() {
 
     <div class="pool">
       <div class="small muted" style="margin-bottom:6px">${pool.length ? `Tap a player to add them to <b class="${f.active}-t">${TEAM[f.active]}</b>` : P && Object.keys(P).length ? 'Everyone is on a team.' : 'Add players by Riot ID — next time they’ll be one tap away.'}</div>
-      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}">${esc(p.id.split('#')[0])}</button>`).join('')}</div>
+      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}" title="${esc(p.id)}">${esc(displayName(p))}</button>`).join('')}</div>
       <div class="row nowrap" style="margin-top:8px"><input id="newPlayer" list="playerList" placeholder="New player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
         <button class="btn" data-act="add-new">Add</button></div>
     </div>
@@ -291,7 +293,7 @@ function viewForm() {
       <button class="btn red" data-act="result" data-side="red">${TEAM.red} won</button></div>
     ${n ? `<div class="results-list">${f.results.map((r, i) => {
       const a = awardOf(f, i);
-      const opts = (list, sel) => '<option value="">—</option>' + list.map(id => `<option value="${esc(id)}" ${sel && keyOf(id) === keyOf(sel) ? 'selected' : ''}>${esc(id.split('#')[0])}</option>`).join('');
+      const opts = (list, sel) => '<option value="">—</option>' + list.map(id => `<option value="${esc(id)}" ${sel && keyOf(id) === keyOf(sel) ? 'selected' : ''}>${esc(dn(id))}</option>`).join('');
       return `<div class="result-row"><button class="res ${r}" data-act="unresult" data-i="${i}" title="Remove game ${i + 1}">G${i + 1} · ${TEAM[r]} won <span class="rm">✕</span></button>
         <label class="aw mvp">★ MVP <select data-award="mvp" data-i="${i}" aria-label="Game ${i + 1} MVP">${opts(f[r], a.mvp)}</select></label>
         <label class="aw ace">◆ ACE <select data-award="ace" data-i="${i}" aria-label="Game ${i + 1} ACE">${opts(f[other(r)], a.ace)}</select></label></div>`;
@@ -504,8 +506,18 @@ function addPending(i) {
 
 // ----- alt accounts (admin only) -----
 function viewLinks() {
-  const links = S.data.links;
-  return `<div class="card" id="links"><h2>Link alt accounts</h2>
+  const links = S.data.links, nicks = S.data.nicks;
+  return `<div class="card" id="links"><h2>Nicknames</h2>
+    <p class="hint" style="margin-top:0">Show a name someone prefers on the ladder. They stay linked to their League account (op.gg link and rating). Leave the nickname empty to remove it.</p>
+    <div class="cols" style="gap:8px">
+      <input id="nickId" list="playerList" placeholder="Player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
+      <input id="nickName" maxlength="${NICK_MAX}" placeholder="Nickname" autocomplete="off" spellcheck="false" style="margin:0">
+    </div>
+    <div class="row end" style="margin-top:8px"><button class="btn gold" data-act="set-nick">Save nickname</button></div>
+    ${nicks.length ? `<div style="margin-top:12px">${nicks.map((n, i) => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto;align-items:center">
+      <div class="side"><b>${esc(n.nick)}</b> <span class="muted">=</span> ${nameHtml(n.id)}</div>
+      <button class="x" data-act="unnick" data-i="${i}" title="Remove nickname">Remove</button></div>`).join('')}</div>` : ''}
+    <h2 style="margin-top:22px">Link alt accounts</h2>
     <p class="hint" style="margin-top:0">Games played on an alt count toward the main player's rating. Unlinking puts them back on the alt.</p>
     <div class="cols" style="gap:8px">
       <input id="linkAlt" list="playerList" placeholder="Alt account — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
@@ -516,6 +528,16 @@ function viewLinks() {
       <div class="side">${nameHtml(l.alt)} <span class="muted">→</span> <b>${nameHtml(resolveId(l.main))}</b></div>
       <button class="x" data-act="unlink" data-i="${i}" title="Unlink">Unlink</button></div>`).join('')}</div>` : ''}
   </div>`;
+}
+function setNick() {
+  const idIn = parseRiotId($('#nickId').value), nick = $('#nickName').value.trim().slice(0, NICK_MAX);
+  if (!idIn) return toast('Pick the player as Name#TAG.', true);
+  const p = S.stats.P[keyOf(resolveId(idIn))];
+  if (!p) return toast('No one on the ladder has that Riot ID yet.', true);
+  commit(d => {
+    d.nicks = (d.nicks || []).filter(n => keyOf(resolveId(n.id)) !== keyOf(p.id));
+    if (nick) d.nicks.push({ id: p.id, nick });
+  }, nick ? `${p.id.split('#')[0]} now shows as ${nick}. Publish to share.` : `Removed ${p.id.split('#')[0]}'s nickname.`);
 }
 function addLink() {
   const altIn = parseRiotId($('#linkAlt').value), mainIn = parseRiotId($('#linkMain').value);
@@ -602,6 +624,8 @@ document.addEventListener('click', async e => {
     case 'show-links': S.showLinks = true; render(); $('#links')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); break;
     case 'hide-links': S.showLinks = false; render(); break;
     case 'add-link': addLink(); break;
+    case 'set-nick': setNick(); break;
+    case 'unnick': { const n = S.data.nicks[Number(a.dataset.i)]; commit(d => { d.nicks.splice(Number(a.dataset.i), 1); }, `Removed the nickname ${n.nick}.`); break; }
     case 'unlink': { const l = S.data.links[Number(a.dataset.i)]; commit(d => { d.links.splice(Number(a.dataset.i), 1); }, `Unlinked ${l.alt.split('#')[0]}.`); break; }
     case 'publish': publish(); break;
     case 'discard':

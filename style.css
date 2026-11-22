@@ -187,3 +187,4 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
   .ladder td.em .emb { width: 34px; height: 34px; }
   .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.ladder .pl .riot { display: block; font-size: 12px; font-weight: 500; color: var(--dim); }
