@@ -261,5 +261,70 @@
       "main": "WidePeepoTired#NA1"
     }
   ],
-  "nicks": []
+  "nicks": [
+    {
+      "id": "Jola#ten",
+      "nick": "Conrad"
+    },
+    {
+      "id": "WidePeepoTired#NA1",
+      "nick": "Matt"
+    },
+    {
+      "id": "TokyoFlavor#NA1",
+      "nick": "Tim"
+    },
+    {
+      "id": "Doc Frungus#Na1",
+      "nick": "Jaden"
+    },
+    {
+      "id": "Freljordbeast99#FUN",
+      "nick": "Eddie the Eagle"
+    },
+    {
+      "id": "SAGE CAT#5925",
+      "nick": "Alex"
+    },
+    {
+      "id": "Jerry#hey",
+      "nick": "Mr. Yao"
+    },
+    {
+      "id": "Deceased Walrus#na1",
+      "nick": "Isaac"
+    },
+    {
+      "id": "ArsDerps#NA1",
+      "nick": "Arjun"
+    },
+    {
+      "id": "leafeon#00000",
+      "nick": "Rick"
+    },
+    {
+      "id": "Borfo#NA1",
+      "nick": "Kevin"
+    },
+    {
+      "id": "AFlinton#na1",
+      "nick": "Aidan"
+    },
+    {
+      "id": "Deluge#7162",
+      "nick": "Nolan"
+    },
+    {
+      "id": "bladdeey#drain",
+      "nick": "Keyan"
+    },
+    {
+      "id": "SPARKOFZAUN99#ZZZ",
+      "nick": "Ahmed (rly shit)"
+    },
+    {
+      "id": "bananamilkk#na1",
+      "nick": "Zhitong"
+    }
+  ]
 }
