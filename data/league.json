@@ -253,6 +253,46 @@
       "winner": "red",
       "mvp": "Nomad#12121",
       "ace": "Jola#ten"
+    },
+    {
+      "id": "gmwsvewzh8qxnu",
+      "date": "2026-11-22",
+      "blue": [
+        "leafeon#00000",
+        "Playmaker#pp00",
+        "nivvk#NA1",
+        "Freljordbeast99#FUN",
+        "SPARKOFZAUN99#ZZZ"
+      ],
+      "red": [
+        "Hadsiehockey#DRBAG",
+        "ArsDerps#NA1",
+        "Borfo#NA1",
+        "TokyoFlavor#NA1",
+        "SpoopySouls#NA1"
+      ],
+      "winner": "blue"
+    },
+    {
+      "id": "gmwsvgpzz4n7rm",
+      "date": "2026-11-23",
+      "blue": [
+        "Freljordbeast99#FUN",
+        "leafeon#00000",
+        "TokyoFlavor#NA1",
+        "Hadsiehockey#DRBAG",
+        "SpoopySouls#NA1"
+      ],
+      "red": [
+        "Playmaker#pp00",
+        "nivvk#NA1",
+        "ArsDerps#NA1",
+        "SPARKOFZAUN99#ZZZ",
+        "Borfo#NA1"
+      ],
+      "winner": "red",
+      "mvp": "Playmaker#pp00",
+      "ace": "leafeon#00000"
     }
   ],
   "links": [
