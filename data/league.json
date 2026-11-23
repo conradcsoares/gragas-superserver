@@ -316,6 +316,27 @@
       "winner": "red",
       "mvp": "Nomad#12121",
       "ace": "Jerry#hey"
+    },
+    {
+      "id": "gmwsxwaauyg2wd",
+      "date": "2026-11-23",
+      "blue": [
+        "WidePeepoTired#NA1",
+        "Playmaker#pp00",
+        "Nomad#12121",
+        "TokyoFlavor#NA1",
+        "DookieDoggo#ded"
+      ],
+      "red": [
+        "Hadsiehockey#DRBAG",
+        "Freljordbeast99#FUN",
+        "nivvk#NA1",
+        "Borfo#NA1",
+        "Jerry#hey"
+      ],
+      "winner": "blue",
+      "mvp": "Playmaker#pp00",
+      "ace": "nivvk#NA1"
     }
   ],
   "links": [
