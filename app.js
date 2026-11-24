@@ -136,8 +136,8 @@ function toast(msg, err = false) {
   const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ''; }, err ? 5000 : 2600);
 }
-// Short name for any account: the player's nickname if set, else the Riot game name.
-function dn(id) { const p = S.stats.P[keyOf(resolveId(id))]; return p ? displayName(p) : id.split('#')[0]; }
+// Short Riot game name for any account (alts show as their main). Nicknames are ladder-only.
+function dn(id) { return (S.stats.P[keyOf(resolveId(id))]?.id || id).split('#')[0]; }
 function nameHtml(id) {
   const [n, t] = id.split('#');
   return `${esc(n)}<span class="tag">#${esc(t)}</span>`;
@@ -283,7 +283,7 @@ function viewForm() {
 
     <div class="pool">
       <div class="small muted" style="margin-bottom:6px">${pool.length ? `Tap a player to add them to <b class="${f.active}-t">${TEAM[f.active]}</b>` : P && Object.keys(P).length ? 'Everyone is on a team.' : 'Add players by Riot ID — next time they’ll be one tap away.'}</div>
-      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}" title="${esc(p.id)}">${esc(displayName(p))}</button>`).join('')}</div>
+      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}" title="${esc(p.id)}">${esc(p.id.split('#')[0])}</button>`).join('')}</div>
       <div class="row nowrap" style="margin-top:8px"><input id="newPlayer" list="playerList" placeholder="New player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
         <button class="btn" data-act="add-new">Add</button></div>
     </div>

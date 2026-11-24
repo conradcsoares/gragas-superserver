@@ -4,7 +4,7 @@ A simple Elo ladder for our 5v5 League of Legends custom games. It's a static si
 
 - One page: the ladder, a **+ Record game** button and the last few games.
 - **Screenshot import:** in the record form, tap **📷 From screenshots** and pick the post-game Scoreboard screenshots (a whole Bo3 at once), or paste one. The site reads the names, the winner and the date in your browser and fills the form for you to check. Names are matched to known players; new players just need their `#TAG` once.
-- **Nicknames:** as the admin, open **Nicknames & alt accounts** under the ladder to give a player a display name. The ladder, games and trailer show the nickname; the Riot ID still shows underneath and links to op.gg.
+- **Nicknames:** as the admin, open **Nicknames & alt accounts** under the ladder to give a player a display name. The ladder (and the trailer) show the nickname with the Riot ID underneath, still linking to op.gg. Recording games and the game history keep using Riot names.
 - **Alt accounts:** as the admin, tap **Link alt accounts** under the ladder to make an alt count toward a main player. Games keep the account that was played, so unlinking is always safe.
 - **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
 - Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
