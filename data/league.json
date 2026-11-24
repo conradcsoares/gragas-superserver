@@ -379,6 +379,69 @@
       "winner": "blue",
       "mvp": "Jola#ten",
       "ace": "WidePeepoTired#NA1"
+    },
+    {
+      "id": "gmwuc447ysvfay",
+      "date": "2026-11-24",
+      "blue": [
+        "Jola#ten",
+        "Borfo#NA1",
+        "leafeon#00000",
+        "bananamilkk#na1",
+        "WidePeepoTired#NA1"
+      ],
+      "red": [
+        "ArsDerps#NA1",
+        "Jerry#hey",
+        "DookieDoggo#ded",
+        "SPARKOFZAUN99#ZZZ",
+        "SpoopySouls#NA1"
+      ],
+      "winner": "red",
+      "mvp": "ArsDerps#NA1",
+      "ace": "leafeon#00000"
+    },
+    {
+      "id": "gmwudj5ltduv4y",
+      "date": "2026-11-24",
+      "blue": [
+        "Jola#ten",
+        "Jerry#hey",
+        "DookieDoggo#ded",
+        "Borfo#NA1",
+        "SpoopySouls#NA1"
+      ],
+      "red": [
+        "TokyoFlavor#NA1",
+        "WidePeepoTired#NA1",
+        "bananamilkk#na1",
+        "Nomad#12121",
+        "BouncyBear#big"
+      ],
+      "winner": "blue",
+      "mvp": "DookieDoggo#ded",
+      "ace": "TokyoFlavor#NA1"
+    },
+    {
+      "id": "gmwuewsnshdggt",
+      "date": "2026-11-24",
+      "blue": [
+        "TokyoFlavor#NA1",
+        "Leonidas5052#0000",
+        "DookieDoggo#ded",
+        "Nomad#12121",
+        "SpoopySouls#NA1"
+      ],
+      "red": [
+        "bananamilkk#na1",
+        "Jerry#hey",
+        "Jola#ten",
+        "Borfo#NA1",
+        "BouncyBear#big"
+      ],
+      "winner": "blue",
+      "mvp": "SpoopySouls#NA1",
+      "ace": "Borfo#NA1"
     }
   ],
   "links": [
@@ -445,12 +508,12 @@
       "nick": "Keyan"
     },
     {
-      "id": "bananamilkk#na1",
-      "nick": "Zhitong"
-    },
-    {
       "id": "SPARKOFZAUN99#ZZZ",
       "nick": "Ahmed"
+    },
+    {
+      "id": "bananamilkk#na1",
+      "nick": "Zhitong"
     }
   ]
 }
