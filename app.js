@@ -20,6 +20,7 @@ const canon = t => { try { return JSON.stringify(JSON.parse(t)); } catch { retur
 const serialize = d => JSON.stringify(d, null, 2) + '\n';
 const b64enc = s => { const b = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]); return btoa(bin); };
 const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
+const clone = x => JSON.parse(JSON.stringify(x));
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* unavailable */ } },
@@ -37,7 +38,7 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { showLinks: false, importing: null, data: null, base: null, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
+const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
 
 
 const resolveId = id => resolveWith(S.stats?.links || {}, id);
@@ -82,13 +83,20 @@ async function publish() {
   if (S.busy) return;
   S.busy = true; renderBanner();
   try {
-    const remote = await ghFetchFile(c);
-    if (remote.text && S.base && hash(canon(remote.text)) !== S.base &&
-      !confirm('Someone else published since you loaded the page. Publishing will overwrite their changes. Continue?')) return;
-    const text = serialize(S.data);
-    await ghRequest('PUT', c, { message: `Update ladder (${S.data.games.length} games)`, content: b64enc(text), branch: c.branch, ...(remote.sha ? { sha: remote.sha } : {}) });
-    S.base = hash(canon(text)); S.dirty = false; S.remoteChanged = false; store.del(LS.draft);
-    toast('Published! The live site updates in about a minute.');
+    // Never upload a stale copy: fetch the live ladder and re-apply only this device's edits on top.
+    // If someone publishes in the split second between our read and write, GitHub refuses (409) and we redo it.
+    let merged = false, text;
+    for (let attempt = 0; ; attempt++) {
+      const remote = await ghFetchFile(c);
+      if (remote.text && hash(canon(remote.text)) !== S.base) { rebase(JSON.parse(remote.text)); merged = true; }
+      text = serialize(S.data);
+      try {
+        await ghRequest('PUT', c, { message: `Update ladder (${S.data.games.length} games)`, content: b64enc(text), branch: c.branch, ...(remote.sha ? { sha: remote.sha } : {}) });
+        break;
+      } catch (e) { if ((e.status === 409 || e.status === 422) && attempt < 2) continue; throw e; }
+    }
+    S.base = hash(canon(text)); S.baseData = normalize(JSON.parse(text)); S.dirty = false; S.remoteChanged = false; store.del(LS.draft);
+    toast(merged ? 'Published, merged with newer changes from someone else. The live site updates in about a minute.' : 'Published! The live site updates in about a minute.');
   } catch (e) {
     if (e.status === 401) { store.set(LS.gh, { token: '' }); S.askKey = true; toast('Your GitHub key expired or was revoked — paste a new one.', true); }
     else if (e.status === 403 || e.status === 404) { S.askKey = 'perm'; window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -110,13 +118,55 @@ async function load() {
   }
   let remote = {};
   if (text) { try { remote = JSON.parse(text); } catch { err = new Error('data/league.json is not valid JSON'); } }
+  if (err && text == null && S.data) { toast(`Couldn't refresh the ladder (${err.message}).`, true); return; } // keep what's on screen
   S.base = text ? hash(canon(text)) : null;
+  S.baseData = normalize(clone(remote)); // separate copy: edits to S.data must never touch it
+  S.remoteChanged = false;
+  S.loadedAt = Date.now();
   const draft = store.get(LS.draft);
-  if (draft && draft.data) { S.data = normalize(draft.data); S.dirty = true; S.remoteChanged = draft.base !== S.base; }
-  else { S.data = normalize(remote); S.dirty = false; S.remoteChanged = false; }
+  S.data = normalize(remote); S.dirty = false;
+  if (draft && draft.data) {
+    if (draft.base === S.base) { S.data = normalize(draft.data); S.dirty = true; }
+    else if (draft.baseData) {
+      // The live ladder moved on since these edits were made: keep the live games, re-apply only the edits.
+      S.data = applyEdits(S.baseData, normalize(draft.baseData), normalize(draft.data));
+      S.dirty = serialize(S.data) !== serialize(S.baseData);
+      if (S.dirty) { saveDraft(); toast('Loaded the latest ladder. Your unpublished changes are still here.'); }
+      else store.del(LS.draft);
+    } else {
+      // Saved by an older version of the site (a full copy with no record of what was edited): too risky to publish.
+      store.del(LS.draft);
+      toast('Loaded the latest ladder. Old unpublished changes on this device were out of date and were dropped.', true);
+    }
+  }
   if (err) toast(`Couldn't load the ladder (${err.message}).`, true);
   update();
 }
+
+// Three-way merge: start from `live`, then apply what changed between `base` (what this device started
+// from) and `mine` (this device's version): added, edited and deleted games, alt links and nicknames.
+function applyEdits(live, base, mine) {
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const mergeList = (L, B, M, key) => {
+    const out = new Map(L.map(x => [key(x), x]));
+    const Bm = new Map(B.map(x => [key(x), x])), Mm = new Map(M.map(x => [key(x), x]));
+    for (const [k, x] of Mm) if (!Bm.has(k) || !same(Bm.get(k), x)) out.set(k, x); // added or edited here
+    for (const k of Bm.keys()) if (!Mm.has(k)) out.delete(k);                      // deleted here
+    return [...out.values()];
+  };
+  return normalize(clone({
+    settings: same(base.settings, mine.settings) ? live.settings : mine.settings,
+    games: mergeList(live.games, base.games, mine.games, g => g.id),
+    links: mergeList(live.links, base.links, mine.links, l => keyOf(l.alt)),
+    nicks: mergeList(live.nicks, base.nicks, mine.nicks, n => keyOf(n.id)),
+  }));
+}
+function rebase(remoteJson) {
+  const live = normalize(clone(remoteJson));
+  S.data = applyEdits(live, S.baseData || live, S.data);
+  S.baseData = live; S.base = hash(canon(JSON.stringify(remoteJson)));
+}
+const saveDraft = () => store.set(LS.draft, { data: S.data, base: S.base, baseData: S.baseData });
 function update() {
   S.stats = compute(S.data);
   $('#playerList').innerHTML = [...S.stats.ladder.map(p => p.id), ...S.data.links.map(l => l.alt)].map(id => `<option value="${esc(id)}">`).join('');
@@ -125,7 +175,7 @@ function update() {
 function commit(fn, msg) {
   fn(S.data);
   S.dirty = true;
-  store.set(LS.draft, { data: S.data, base: S.base });
+  saveDraft();
   update();
   if (msg) toast(msg);
 }
@@ -668,3 +718,6 @@ document.addEventListener('paste', e => {
 });
 
 load();
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !S.busy && !S.form && !S.showLinks && !S.askKey && Date.now() - S.loadedAt > 20000) load();
+});

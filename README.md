@@ -16,6 +16,10 @@ A simple Elo ladder for our 5v5 League of Legends custom games. It's a static si
 
 Riot's API doesn't return custom games, apart from tournament-code games, which need a special production key. That's why op.gg and similar sites can't show customs either. A new player's Riot ID is typed once. After that, they're a one-tap button.
 
+## Several people publishing
+
+Anyone with a key can publish. Unpublished changes are saved per device as *edits*, not as a copy of the whole ladder. Reloading always shows the live ladder with your edits on top, and Publish re-applies your edits to whatever is live at that moment, so one person's publish never wipes out another's games.
+
 ## How the rating works
 
 - Everyone starts at 1000.
