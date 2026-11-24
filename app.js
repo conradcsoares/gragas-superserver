@@ -173,7 +173,7 @@ function viewLadder() {
         <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a.split('#')[0])).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
-      <td class="r num"><span class="rating">${p.rating}</span></td>
+      <td class="r num"><span class="rating">${p.rating}</span>${p.last ? `<span class="d ${p.last > 0 ? 'pos' : 'neg'}" title="Rating change from their last game">${signed(p.last)}</span>` : ''}</td>
     </tr>`).join('')}</tbody></table>
     <div class="legend">${RANKS.map((r, i) => `<span class="lg" style="color:${r.color}">${emblemSvg(i)}<span>${r.name}<small>${rankRange(i)}</small></span></span>`).reverse().join('')}</div>
     ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Nicknames &amp; alt accounts</button></div>' : ''}</div>`;
