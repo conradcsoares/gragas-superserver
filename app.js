@@ -97,7 +97,9 @@ async function publish() {
       } catch (e) { if ((e.status === 409 || e.status === 422) && attempt < 2) continue; throw e; }
     }
     S.base = hash(canon(text)); S.baseData = normalize(JSON.parse(text)); S.dirty = false; S.remoteChanged = false; store.del(LS.draft);
-    toast(merged ? 'Published, merged with newer changes from someone else. The live site updates in about a minute.' : 'Published! The live site updates in about a minute.');
+    ringDoorbell();
+    const when = doorbell ? 'Everyone sees it now.' : 'Everyone sees it within about a minute.';
+    toast(merged ? `Published, merged with newer changes from someone else. ${when}` : `Published! ${when}`);
   } catch (e) {
     if (e.status === 401) { store.set(LS.gh, { token: '' }); S.askKey = true; toast('Your GitHub key expired or was revoked — paste a new one.', true); }
     else if (e.status === 403 || e.status === 404) { S.askKey = 'perm'; window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -107,15 +109,32 @@ async function publish() {
 }
 
 // ---------- load / save ----------
-async function load() {
-  let text = null, err = null;
+// The live ladder straight from the repo through GitHub's API, so a publish shows up as soon as it's committed
+// (GitHub Pages takes about a minute to rebuild). Without a key GitHub allows 60 of these an hour per network,
+// so it's only used on page load and when there's reason to think the ladder changed — never on a timer.
+// Returns the file's text, or null if it doesn't exist.
+async function fetchLive() {
   const c = ghCfg();
-  if (ghReady(c)) { try { text = (await ghFetchFile(c)).text; } catch (e) { err = e; } }
-  if (text == null) {
-    try {
-      const r = await fetch(`data/league.json?t=${Date.now()}`, { cache: 'no-store' });
-      if (r.ok) text = await r.text(); else if (r.status !== 404) err = new Error(`HTTP ${r.status}`);
-    } catch (e) { err = err || e; }
+  if (ghReady(c)) return (await ghFetchFile(c)).text;
+  const path = c.path.split('/').map(encodeURIComponent).join('/');
+  const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${path}?ref=${encodeURIComponent(c.branch)}`,
+    { cache: 'no-cache', headers: { Accept: 'application/vnd.github.raw+json' } });
+  if (r.status === 404) return null;
+  if (!r.ok) { const e = new Error(`GitHub said ${r.status}`); e.status = r.status; throw e; }
+  return r.text();
+}
+// prefetched: text already fetched by the live check (skips fetching again).
+async function load(prefetched) {
+  let text = prefetched ?? null, err = null;
+  if (prefetched === undefined) {
+    try { text = await fetchLive(); } catch (e) { err = e; }
+    if (text == null) {
+      // GitHub's API unreachable or rate-limited: fall back to the copy GitHub Pages serves.
+      try {
+        const r = await fetch(`data/league.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (r.ok) { text = await r.text(); if (!ghReady()) err = null; } else if (r.status !== 404) err = err || new Error(`HTTP ${r.status}`);
+      } catch (e) { err = err || e; }
+    }
   }
   let remote = {};
   if (text) { try { remote = JSON.parse(text); } catch { err = new Error('data/league.json is not valid JSON'); } }
@@ -174,7 +193,14 @@ function update() {
   if (crown !== S.crownShown && crown !== S.crownTried) {
     S.crownTried = crown;
     if (!crown) { CROWN_IMG = null; S.crownShown = null; }
-    else loadCrownImg(crown).then(ok => { if (ok) { S.crownShown = crown; render(); } });
+    else {
+      // A live update can name a picture GitHub Pages hasn't deployed yet (about a minute), so retry for a while.
+      const tryLoad = (left, fresh) => loadCrownImg(crown, fresh).then(ok => {
+        if (S.crownTried !== crown) return; // a different picture was set meanwhile
+        if (ok) { S.crownShown = crown; render(); } else if (left > 0) setTimeout(() => tryLoad(left - 1, true), 20000);
+      });
+      tryLoad(6);
+    }
   }
   $('#playerList').innerHTML = [...S.stats.ladder.map(p => p.id), ...S.data.links.map(l => l.alt)].map(id => `<option value="${esc(id)}">`).join('');
   render();
@@ -998,6 +1024,59 @@ document.addEventListener('paste', e => {
 });
 
 load();
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && !S.busy && !S.form && !S.showLinks && !S.askKey && Date.now() - S.loadedAt > 20000) load();
-});
+// ---------- live updates ----------
+// 1. Doorbell (instant): after a publish, the publisher's browser rings a Supabase Realtime broadcast channel.
+//    Every open page hears it within a second or two and fetches the ladder from GitHub's API.
+//    The channel only says "something changed"; the data always comes from GitHub, so a fake ring can't change anything.
+// 2. Fallback (about a minute): every 15 s, check the copy GitHub Pages serves (no rate limit). Pages lags behind
+//    the repo after a publish, so a different copy is confirmed through GitHub's API before it's shown, at most once
+//    per Pages change. That way the page never rolls back to an older ladder.
+// Unpublished edits on this device are kept either way (load() re-applies them on top).
+// Supabase project URL + publishable key: both public by design (the doorbell only needs Realtime broadcast,
+// no tables or secrets). Empty = doorbell off.
+const LIVE = { url: 'https://dxwretijaangbpwxkvbk.supabase.co', key: 'sb_publishable_9-BKbz_bI0L2JWn3hG17zg_gX197gRW' };
+const PAGES_EVERY = 15000;
+let liveBusy = false, pagesSeen = null, doorbell = null;
+async function applyLive(text) {
+  if (text == null || hash(canon(text)) === S.base) return false;
+  const el = document.activeElement; // don't redraw under someone typing; the next check picks it up
+  if (S.busy || (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName))) { pagesSeen = null; return false; }
+  await load(text);
+  toast('The ladder just updated.');
+  return true;
+}
+async function liveCheck(rang = false) {
+  if (liveBusy || document.hidden || S.busy || !S.data) return;
+  liveBusy = true;
+  try {
+    if (!rang) {
+      const r = await fetch(`data/league.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const h = hash(canon(await r.text()));
+      if (h === S.base || h === pagesSeen) { pagesSeen = h; return; }
+      pagesSeen = h; // different from what's on screen: newer or older? Ask GitHub (once per Pages change).
+    }
+    await applyLive(await fetchLive());
+  } catch { /* offline or rate-limited: the next check tries again */ } finally { liveBusy = false; }
+}
+async function startDoorbell() {
+  if (!LIVE.url || !LIVE.key) return;
+  try {
+    await new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+      sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc);
+    });
+    const ch = window.supabase.createClient(LIVE.url, LIVE.key).channel('ladder', { config: { broadcast: { self: false } } });
+    let last = 0;
+    ch.on('broadcast', { event: 'updated' }, () => {
+      const now = Date.now(); if (now - last < 5000) return; last = now; // ignore bursts
+      setTimeout(() => liveCheck(true), 1500); // give GitHub a moment to serve the new commit
+    }).subscribe();
+    doorbell = ch;
+  } catch { /* doorbell unavailable: the Pages check still catches updates */ }
+}
+function ringDoorbell() { try { doorbell?.send({ type: 'broadcast', event: 'updated', payload: {} }); } catch { /* best effort */ } }
+setInterval(() => liveCheck(), PAGES_EVERY);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) liveCheck(); });
+startDoorbell();

@@ -23,6 +23,14 @@ Riot's API doesn't return custom games, apart from tournament-code games, which 
 
 Anyone with a key can publish. Unpublished changes are saved per device as *edits*, not as a copy of the whole ladder. Reloading always shows the live ladder with your edits on top, and Publish re-applies your edits to whatever is live at that moment, so one person's publish never wipes out another's games.
 
+## Live updates
+
+Open pages update by themselves when someone publishes, without reloading:
+
+- **Instant:** after a publish, the publisher's browser sends a "ladder updated" ping over a free [Supabase](https://supabase.com) Realtime broadcast channel. Every open page hears it within a second or two and fetches the new `data/league.json` from GitHub's API. The ping carries no data, so a fake one can't change anything. The Supabase URL and publishable key in `app.js` are public by design; the doorbell uses no tables.
+- **Fallback:** every 15 seconds pages also check the copy GitHub Pages serves, which catches up about a minute after a publish (e.g. if Supabase is unreachable). A different copy is confirmed through GitHub's API first, so a page never rolls back to an older ladder.
+- Page loads read the ladder from GitHub's API too, so a reload never shows a stale copy. Without a key GitHub allows 60 API requests an hour per network, which is why nothing polls the API on a timer.
+
 ## How the rating works
 
 - Everyone starts at 1000.
@@ -42,7 +50,7 @@ Anyone with a key can publish. Unpublished changes are saved per device as *edit
 Games are stored in `data/league.json` in the repo. Visitors see a read-only ladder. To edit, open `https://conradcsoares.github.io/gragas-superserver/#admin` once on your device. That unlocks **+ Record game** there. The first time you press **Publish**, the site asks for a GitHub key:
 
 1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new). Pick **Only select repositories** → this repo. Under Permissions, click **+ Add permissions** → **Contents**, then set it to **Read and write**.
-2. Paste it into the box and click **Save & publish**. The live site updates in about a minute.
+2. Paste it into the box and click **Save & publish**. Everyone with the site open sees it within a couple of seconds (see *Live updates*).
 
 The key is stored only in that browser. To let a friend record games, add them as a repo collaborator and have them make their own key.
 

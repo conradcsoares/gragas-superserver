@@ -101,9 +101,10 @@ const EMBLEM_GLYPHS = [
 // Optional custom #1 picture (uploaded by the admin, path in settings.crownImg), held as a data URL so the
 // emblem also works as a standalone image (the trailer draws emblems onto a canvas).
 let CROWN_IMG = null;
-async function loadCrownImg(path) {
+async function loadCrownImg(path, fresh = false) {
   try {
-    const r = await fetch(path, { cache: 'force-cache' });
+    // fresh: skip the browser cache, so a retry doesn't get a cached 'not found' from before Pages deployed the file
+    const r = await fetch(path, { cache: fresh ? 'reload' : 'force-cache' });
     if (!r.ok) return false;
     const blob = await r.blob();
     CROWN_IMG = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
