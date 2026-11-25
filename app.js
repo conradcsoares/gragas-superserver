@@ -170,6 +170,12 @@ function rebase(remoteJson) {
 const saveDraft = () => store.set(LS.draft, { data: S.data, base: S.base, baseData: S.baseData });
 function update() {
   S.stats = compute(S.data);
+  const crown = S.data.settings.crownImg || null;
+  if (crown !== S.crownShown && crown !== S.crownTried) {
+    S.crownTried = crown;
+    if (!crown) { CROWN_IMG = null; S.crownShown = null; }
+    else loadCrownImg(crown).then(ok => { if (ok) { S.crownShown = crown; render(); } });
+  }
   $('#playerList').innerHTML = [...S.stats.ladder.map(p => p.id), ...S.data.links.map(l => l.alt)].map(id => `<option value="${esc(id)}">`).join('');
   render();
 }
@@ -219,19 +225,36 @@ function render() {
 function viewLadder() {
   const { ladder } = S.stats, region = S.data.settings.region;
   if (!ladder.length) return `<div class="card empty">No games yet.</div>`;
-  return `<div class="card"><table class="ladder">
+  const rest = ladder.slice(3);
+  return `<div class="card">${viewPodium(ladder, region)}${rest.length ? `<table class="ladder">
     <thead><tr><th class="rk">#</th><th class="em"></th><th>Player</th><th class="r">W–L</th><th class="r">Rating</th></tr></thead>
-    <tbody>${ladder.map((p, i) => `<tr>
+    <tbody>${rest.map((p, j) => { const i = j + 3; return `<tr>
       <td class="rk">${i + 1}</td>
       <td class="em">${emblemSvg(rankOf(p.rating, i))}</td>
       <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">${fullNameHtml(p.id)}</a>
         <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a)).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
-      <td class="r num"><span class="rating">${p.rating}</span>${p.last ? `<span class="d ${p.last > 0 ? 'pos' : 'neg'}" title="Rating change from their last game">${signed(p.last)}</span>` : ''}</td>
-    </tr>`).join('')}</tbody></table>
+      <td class="r num"><span class="rating">${p.rating}</span>${lastHtml(p)}</td>
+    </tr>`; }).join('')}</tbody></table>` : ''}
     <div class="legend">${RANKS.map((r, i) => `<span class="lg" style="color:${r.color}">${emblemSvg(i)}<span>${r.name}<small>${rankRange(i)}</small></span></span>`).reverse().join('')}</div>
     ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Nicknames &amp; alt accounts</button></div>' : ''}</div>`;
+}
+
+const lastHtml = p => (p.last ? `<span class="d ${p.last > 0 ? 'pos' : 'neg'}" title="Rating change from their last game">${signed(p.last)}</span>` : '');
+// Top 3 on steps: 2nd on the left, 1st in the middle (tallest), 3rd on the right.
+function viewPodium(ladder, region) {
+  const order = [1, 0, 2].filter(i => ladder[i]);
+  return `<div class="podium">${order.map(i => {
+    const p = ladder[i], ri = rankOf(p.rating, i), r = RANKS[ri];
+    return `<a class="pod p${i + 1}" href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">
+      <div class="pod-emb">${emblemSvg(ri)}</div>
+      <div class="pod-name">${esc(displayName(p))}</div>
+      ${p.nick ? `<div class="pod-id">${esc(p.id)}</div>` : `<div class="pod-id">#${esc(p.id.split('#')[1])}</div>`}
+      <div class="pod-rank" style="color:${r.color}">${r.name}</div>
+      <div class="pod-step"><div class="pod-place">${i + 1}</div><div class="pod-rating num">${p.rating}${lastHtml(p)}</div><div class="pod-wl num">${p.wins}–${p.losses}</div></div>
+    </a>`;
+  }).join('')}</div>`;
 }
 
 // Consecutive games sharing a series id (a Bo3 etc.) are shown as one row. Newest first.
@@ -658,7 +681,13 @@ function addPending(i) {
 // ----- alt accounts (admin only) -----
 function viewLinks() {
   const links = S.data.links, nicks = S.data.nicks;
-  return `<div class="card" id="links"><h2>Nicknames</h2>
+  return `<div class="card" id="links"><h2>#1 picture</h2>
+    <div class="row nowrap" style="align-items:center;gap:12px">
+      <div style="width:76px;height:76px;flex-shrink:0">${emblemSvg(CROWN)}</div>
+      <p class="hint" style="margin:0">The picture inside the #1 (Ayanokoji) emblem. Pick any image: it's cropped to a square around the top-middle and fitted into the frame. It publishes right away.</p>
+    </div>
+    <div class="row end" style="margin-top:8px">${S.data.settings.crownImg ? '<button class="btn" data-act="crown-reset">Use the drawn one</button>' : ''}<button class="btn gold" data-act="crown-pick" ${S.busy ? 'disabled' : ''}>${S.data.settings.crownImg ? 'Change picture…' : 'Upload picture…'}</button></div>
+    <h2 style="margin-top:22px">Nicknames</h2>
     <p class="hint" style="margin-top:0">Show a name someone prefers on the ladder. They stay linked to their League account (op.gg link and rating). Leave the nickname empty to remove it.</p>
     <div class="cols" style="gap:8px">
       <input id="nickId" list="playerList" placeholder="Player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
@@ -680,6 +709,46 @@ function viewLinks() {
       <button class="x" data-act="unlink" data-i="${i}" title="Unlink">Unlink</button></div>`).join('')}</div>` : ''}
   </div>`;
 }
+// ----- custom #1 picture (admin only) -----
+// Crop to a square (centered, a little above middle on tall images, where faces usually are), resize, upload
+// as its own file, then point settings.crownImg at it and publish. Each upload gets a new file name, so no caching issues.
+async function uploadCrown(file) {
+  const c = ghCfg();
+  if (!ghReady(c)) { S.askKey = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return toast('Add your GitHub key first, then upload again.', true); }
+  try {
+    S.busy = true; render(); toast('Uploading the picture…');
+    const img = await loadImage(file);
+    const w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
+    const cv = document.createElement('canvas'); cv.width = cv.height = 320;
+    cv.getContext('2d').drawImage(img, (w - side) / 2, h > w ? (h - side) * 0.2 : 0, side, side, 0, 0, 320, 320);
+    let url = cv.toDataURL('image/webp', 0.85);
+    const ext = url.startsWith('data:image/webp') ? 'webp' : 'png';
+    if (ext === 'png') url = cv.toDataURL('image/png');
+    const path = `assets/crown-${Date.now().toString(36)}.${ext}`;
+    await ghRequest('PUT', { ...c, path }, { message: 'Update #1 picture', content: url.split(',')[1], branch: c.branch });
+    const old = S.data.settings.crownImg;
+    CROWN_IMG = url; S.crownShown = S.crownTried = path;
+    commit(d => { d.settings.crownImg = path; });
+    S.busy = false;
+    await publish();
+    if (old) removeGhFile(old);
+  } catch (e) {
+    S.busy = false; render();
+    if (e.status === 401 || e.status === 403 || e.status === 404) { S.askKey = e.status === 401 ? true : 'perm'; render(); }
+    toast(`Couldn't upload the picture — ${e.message}`, true);
+  }
+}
+async function resetCrown() {
+  const old = S.data.settings.crownImg;
+  CROWN_IMG = null; S.crownShown = S.crownTried = null;
+  commit(d => { delete d.settings.crownImg; });
+  await publish();
+  if (old) removeGhFile(old);
+}
+async function removeGhFile(path) { // best effort: tidy up the previous picture
+  try { const c = { ...ghCfg(), path }; const j = await ghRequest('GET', c); await ghRequest('DELETE', c, { message: 'Remove old #1 picture', sha: j.sha, branch: c.branch }); } catch { /* leave it */ }
+}
+
 function setNick() {
   const idIn = parseRiotId($('#nickId').value), nick = $('#nickName').value.trim().slice(0, NICK_MAX);
   if (!idIn) return toast('Pick the player as Name#TAG.', true);
@@ -781,6 +850,8 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'toggle-all': S.showAll = !S.showAll; render(); break;
+    case 'crown-pick': $('#crownFile').click(); break;
+    case 'crown-reset': if (confirm('Go back to the drawn #1 emblem?')) resetCrown(); break;
     case 'show-links': S.showLinks = true; render(); $('#links')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); break;
     case 'hide-links': S.showLinks = false; render(); break;
     case 'add-link': addLink(); break;
@@ -820,6 +891,7 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'ghToken') { e.preventDefault(); $('[data-act=save-key]').click(); }
 });
 
+$('#crownFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadCrown(f); });
 $('#shotFile').addEventListener('change', e => { const files = [...e.target.files]; e.target.value = ''; importShots(files); });
 document.addEventListener('paste', e => {
   if (!S.form) return;

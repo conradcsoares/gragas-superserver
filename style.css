@@ -215,3 +215,32 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
 .chip.on.lock-blue, .chip.on.on-blue { box-shadow: inset 4px 0 0 var(--blue); }
 .chip.on.lock-red, .chip.on.on-red { box-shadow: inset 4px 0 0 var(--red); }
 .tbox .swing { margin: -2px 0 8px; color: var(--muted); }
+
+/* Podium (top 3) */
+.podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; margin: 4px 0 18px; }
+.pod { display: flex; flex-direction: column; align-items: center; text-align: center; text-decoration: none; min-width: 0; }
+.pod:hover .pod-name { color: var(--gold-hi); text-decoration: underline; }
+.pod-emb { width: 64px; height: 64px; margin-bottom: 6px; filter: drop-shadow(0 4px 8px rgba(0,0,0,.55)); }
+.pod.p1 .pod-emb { width: 96px; height: 96px; filter: drop-shadow(0 0 14px color-mix(in srgb, var(--gold) 55%, transparent)); }
+.pod-name { font-weight: 800; font-size: 16px; line-height: 1.2; max-width: 100%; overflow-wrap: anywhere; }
+.pod.p1 .pod-name { font-size: 19px; color: var(--gold-hi); }
+.pod-id { font-size: 11px; color: var(--dim); max-width: 100%; overflow-wrap: anywhere; }
+.pod-rank { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin: 3px 0 8px; }
+.pod-step { width: 100%; border-radius: 10px 10px 4px 4px; padding: 10px 6px 8px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; border: 1px solid var(--c1); background: linear-gradient(180deg, color-mix(in srgb, var(--c1) 32%, var(--panel2)), var(--panel)); }
+.pod.p1 .pod-step { --c1: #d4af37; min-height: 128px; }
+.pod.p2 .pod-step { --c1: #a9b4c4; min-height: 98px; }
+.pod.p3 .pod-step { --c1: #b8743c; min-height: 76px; }
+.pod-place { font-family: Cinzel, Georgia, serif; font-weight: 700; font-size: 28px; line-height: 1; color: var(--c1); }
+.pod.p1 .pod-place { font-size: 38px; }
+.pod-rating { font-weight: 800; font-size: 17px; }
+.pod-rating .d { display: inline; margin-left: 5px; font-size: 11px; }
+.pod-wl { font-size: 12px; color: var(--muted); }
+@media (max-width: 480px) {
+  .podium { gap: 6px; }
+  .pod-emb { width: 52px; height: 52px; }
+  .pod.p1 .pod-emb { width: 74px; height: 74px; }
+  .pod-name { font-size: 14px; }
+  .pod.p1 .pod-name { font-size: 16px; }
+  .pod-rating { font-size: 15px; }
+  .pod-rating .d { display: block; margin-left: 0; }
+}

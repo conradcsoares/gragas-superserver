@@ -39,8 +39,8 @@
   </div>
   <p class="note" id="note">Sound on.</p>
 
-  <script src="core.js?v=29"></script>
-  <script src="emblems.js?v=30"></script>
+  <script src="core.js?v=31"></script>
+  <script src="emblems.js?v=31"></script>
   <script>
   'use strict';
   const W = 1280, H = 720, LEN = 25;
@@ -58,6 +58,7 @@
     try {
       const r = await fetch(`data/league.json?t=${Date.now()}`, { cache: 'no-store' });
       const d = normalize(await r.json()), s = compute(d);
+      if (d.settings.crownImg) await loadCrownImg(d.settings.crownImg);
       stats = { ladder: s.ladder, games: d.games.length };
     } catch { /* trailer still plays without names */ }
   }
@@ -319,7 +320,7 @@
     loop();
   }
 
-  const ready = Promise.all([loadData(), loadIcons(), document.fonts.load('900 40px Cinzel'), document.fonts.load('900 40px Inter'), document.fonts.load('800 40px Inter')]);
+  const ready = Promise.all([loadData().then(loadIcons), document.fonts.load('900 40px Cinzel'), document.fonts.load('900 40px Inter'), document.fonts.load('800 40px Inter')]);
   ready.then(() => frame(3.9));
   $('#cover').onclick = () => ready.then(() => play());
   $('#replay').onclick = () => ready.then(() => play());

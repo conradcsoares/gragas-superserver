@@ -98,6 +98,21 @@ const EMBLEM_GLYPHS = [
     <path d="M32 16.6l1.5 1.9-1.5 1.9-1.5-1.9z" fill="#d9344a"/>`,
 ];
 
+// Optional custom #1 picture (uploaded by the admin, path in settings.crownImg), held as a data URL so the
+// emblem also works as a standalone image (the trailer draws emblems onto a canvas).
+let CROWN_IMG = null;
+async function loadCrownImg(path) {
+  try {
+    const r = await fetch(path, { cache: 'force-cache' });
+    if (!r.ok) return false;
+    const blob = await r.blob();
+    CROWN_IMG = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+    return true;
+  } catch { return false; }
+}
+const crownPicture = (c, id) => `<image href="${CROWN_IMG}" x="6.5" y="6.5" width="51" height="51" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>
+    <polygon points="${hexPts(25.5)}" fill="none" stroke="${c}" stroke-width="1.4"/>`;
+
 const hexPts = (r, cx = 32, cy = 32) =>
   [0, 1, 2, 3, 4, 5].map(k => { const a = Math.PI / 3 * k - Math.PI / 2; return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`; }).join(' ');
 
@@ -126,6 +141,6 @@ function emblemSvg(i, cls = 'emb') {
       <radialGradient id="${id}g"><stop offset=".55" stop-color="${c}" stop-opacity=".45"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>
     </defs>
     ${emblemFrame(i, c, id)}
-    ${EMBLEM_GLYPHS[i](c)}
+    ${i === CROWN && CROWN_IMG ? crownPicture(c, id) : EMBLEM_GLYPHS[i](c)}
   </svg>`;
 }
