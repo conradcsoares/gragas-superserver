@@ -684,9 +684,9 @@ function viewLinks() {
   return `<div class="card" id="links"><h2>#1 picture</h2>
     <div class="row nowrap" style="align-items:center;gap:12px">
       <div style="width:76px;height:76px;flex-shrink:0">${emblemSvg(CROWN)}</div>
-      <p class="hint" style="margin:0">The picture inside the #1 (Ayanokoji) emblem. Pick any image: it's cropped to a square around the top-middle and fitted into the frame. It publishes right away.</p>
+      <p class="hint" style="margin:0">The picture inside the #1 (Ayanokoji) emblem. Pick any image, then drag and zoom it to fit the frame. It publishes when you press Save.</p>
     </div>
-    <div class="row end" style="margin-top:8px">${S.data.settings.crownImg ? '<button class="btn" data-act="crown-reset">Use the drawn one</button>' : ''}<button class="btn gold" data-act="crown-pick" ${S.busy ? 'disabled' : ''}>${S.data.settings.crownImg ? 'Change picture…' : 'Upload picture…'}</button></div>
+    <div class="row end" style="margin-top:8px">${S.data.settings.crownImg ? '<button class="btn" data-act="crown-reset">Use the drawn one</button><button class="btn" data-act="crown-adjust">Adjust position</button>' : ''}<button class="btn gold" data-act="crown-pick" ${S.busy ? 'disabled' : ''}>${S.data.settings.crownImg ? 'Change picture…' : 'Upload picture…'}</button></div>
     <h2 style="margin-top:22px">Nicknames</h2>
     <p class="hint" style="margin-top:0">Show a name someone prefers on the ladder. They stay linked to their League account (op.gg link and rating). Leave the nickname empty to remove it.</p>
     <div class="cols" style="gap:8px">
@@ -713,17 +713,98 @@ function viewLinks() {
 // Crop to a square (centered, a little above middle on tall images, where faces usually are), resize, upload
 // as its own file, then point settings.crownImg at it and publish. Each upload gets a new file name, so no caching issues.
 async function uploadCrown(file) {
+  if (!ghReady()) { S.askKey = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return toast('Add your GitHub key first, then upload again.', true); }
+  try { openCropper(await loadImage(file)); } catch { toast('Couldn’t open that image.', true); }
+}
+// Re-position the picture that's already up (works on the saved square, so zooming out stops at the edges).
+async function adjustCrown() {
+  if (!CROWN_IMG) return toast('The picture is still loading, try again in a second.', true);
+  if (!ghReady()) { S.askKey = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return toast('Add your GitHub key first.', true); }
+  const img = new Image(); img.src = CROWN_IMG; await img.decode(); openCropper(img);
+}
+
+// Drag to move, slider / wheel to zoom; the dark mask shows what the hexagon frame hides.
+function openCropper(img) {
+  const OUT = 320, w = img.naturalWidth, h = img.naturalHeight, base = Math.min(w, h);
+  const st = { zoom: 1, cx: w / 2, cy: h > w ? (h - base) * 0.2 + base / 2 : h / 2 };
+  const side = () => base / st.zoom;
+  const clampPos = () => {
+    const half = side() / 2;
+    st.cx = Math.min(w - half, Math.max(half, st.cx));
+    st.cy = Math.min(h - half, Math.max(half, st.cy));
+  };
+  const hex = hexPts(25.5);
+  const wrap = document.createElement('div');
+  wrap.className = 'crop-wrap';
+  wrap.innerHTML = `<div class="card crop-card" role="dialog" aria-modal="true" aria-label="Position the #1 picture">
+    <h2>Position the #1 picture</h2>
+    <p class="hint" style="margin-top:0">Drag the picture to move it. Use the slider (or scroll) to zoom. The dark area is hidden by the frame.</p>
+    <div class="crop-main">
+      <div class="crop-stage"><canvas width="${OUT}" height="${OUT}"></canvas>
+        <svg viewBox="6.5 6.5 51 51" aria-hidden="true"><path fill-rule="evenodd" fill="rgba(5,7,13,.7)" d="M6.5 6.5h51v51h-51zM${hex.replace(/ /g, 'L')}z"/><polygon points="${hex}" fill="none" stroke="#f0c75e" stroke-width=".5"/></svg></div>
+      <div class="crop-side"><div class="small muted">Preview</div><div class="crop-prev"></div><div class="crop-prev sm"></div></div>
+    </div>
+    <div class="row nowrap crop-zoom"><span class="muted">−</span><input type="range" min="1" max="5" step="0.01" value="1" aria-label="Zoom"><span class="muted">+</span></div>
+    <div class="row end"><button class="btn" data-c="cancel">Cancel</button><button class="btn" data-c="reset">Reset</button><button class="btn gold" data-c="save">Save</button></div>
+  </div>`;
+  document.body.appendChild(wrap);
+  const cv = wrap.querySelector('canvas'), ctx = cv.getContext('2d'), stage = wrap.querySelector('.crop-stage');
+  const range = wrap.querySelector('input[type=range]'), prevs = wrap.querySelectorAll('.crop-prev');
+  let prevTimer = 0;
+  const draw = () => {
+    clampPos();
+    const sd = side();
+    ctx.clearRect(0, 0, OUT, OUT);
+    ctx.drawImage(img, st.cx - sd / 2, st.cy - sd / 2, sd, sd, 0, 0, OUT, OUT);
+    clearTimeout(prevTimer);
+    prevTimer = setTimeout(() => {
+      const saved = CROWN_IMG; CROWN_IMG = cv.toDataURL('image/jpeg', 0.8);
+      const html = emblemSvg(CROWN); CROWN_IMG = saved;
+      prevs.forEach(p => { p.innerHTML = html; });
+    }, 60);
+  };
+  const setZoom = (z, fx = 0.5, fy = 0.5) => { // keep the point under (fx, fy) of the stage in place
+    const before = side(); st.zoom = Math.min(5, Math.max(1, z));
+    const after = side();
+    st.cx += (fx - 0.5) * (before - after); st.cy += (fy - 0.5) * (before - after);
+    range.value = st.zoom; draw();
+  };
+  let drag = null;
+  stage.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; stage.setPointerCapture(e.pointerId); stage.classList.add('grabbing'); });
+  stage.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const k = side() / stage.getBoundingClientRect().width;
+    st.cx -= (e.clientX - drag.x) * k; st.cy -= (e.clientY - drag.y) * k;
+    drag = { x: e.clientX, y: e.clientY }; draw();
+  });
+  const end = () => { drag = null; stage.classList.remove('grabbing'); };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  stage.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    setZoom(st.zoom * Math.exp(-e.deltaY / 400), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  }, { passive: false });
+  range.addEventListener('input', () => setZoom(Number(range.value)));
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  wrap.addEventListener('click', e => {
+    const c = e.target.closest('[data-c]')?.dataset.c;
+    if (e.target === wrap || c === 'cancel') close();
+    else if (c === 'reset') { st.zoom = 1; st.cx = w / 2; st.cy = h / 2; range.value = 1; draw(); }
+    else if (c === 'save') {
+      let url = cv.toDataURL('image/webp', 0.88);
+      if (!url.startsWith('data:image/webp')) url = cv.toDataURL('image/png');
+      close(); saveCrown(url);
+    }
+  });
+  draw();
+}
+async function saveCrown(url) {
   const c = ghCfg();
-  if (!ghReady(c)) { S.askKey = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return toast('Add your GitHub key first, then upload again.', true); }
   try {
     S.busy = true; render(); toast('Uploading the picture…');
-    const img = await loadImage(file);
-    const w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
-    const cv = document.createElement('canvas'); cv.width = cv.height = 320;
-    cv.getContext('2d').drawImage(img, (w - side) / 2, h > w ? (h - side) * 0.2 : 0, side, side, 0, 0, 320, 320);
-    let url = cv.toDataURL('image/webp', 0.85);
     const ext = url.startsWith('data:image/webp') ? 'webp' : 'png';
-    if (ext === 'png') url = cv.toDataURL('image/png');
     const path = `assets/crown-${Date.now().toString(36)}.${ext}`;
     await ghRequest('PUT', { ...c, path }, { message: 'Update #1 picture', content: url.split(',')[1], branch: c.branch });
     const old = S.data.settings.crownImg;
@@ -851,6 +932,7 @@ document.addEventListener('click', async e => {
     }
     case 'toggle-all': S.showAll = !S.showAll; render(); break;
     case 'crown-pick': $('#crownFile').click(); break;
+    case 'crown-adjust': adjustCrown(); break;
     case 'crown-reset': if (confirm('Go back to the drawn #1 emblem?')) resetCrown(); break;
     case 'show-links': S.showLinks = true; render(); $('#links')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); break;
     case 'hide-links': S.showLinks = false; render(); break;
