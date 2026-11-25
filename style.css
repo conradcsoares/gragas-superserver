@@ -199,8 +199,6 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
 .bal-opt.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
 .bal-opt.on b { color: var(--gold-hi); }
 .mem .rt { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 500; flex-shrink: 0; }
-.mem.ro { cursor: default; }
-.mem.ro:hover { border-color: var(--border); }
 .chip.on { border-color: var(--gold); color: var(--gold-hi); }
 .chip .rm { color: var(--dim); font-size: 11px; margin-left: 4px; }
 .nick { color: var(--muted); font-weight: 500; }
@@ -214,5 +212,6 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
 .mem .lk.on { opacity: 1; }
 .tbox.blue .mem.locked { border-color: var(--blue); }
 .tbox.red .mem.locked { border-color: var(--red); }
-.chip.on.lock-blue { box-shadow: inset 4px 0 0 var(--blue); }
-.chip.on.lock-red { box-shadow: inset 4px 0 0 var(--red); }
+.chip.on.lock-blue, .chip.on.on-blue { box-shadow: inset 4px 0 0 var(--blue); }
+.chip.on.lock-red, .chip.on.on-red { box-shadow: inset 4px 0 0 var(--red); }
+.tbox .swing { margin: -2px 0 8px; color: var(--muted); }
