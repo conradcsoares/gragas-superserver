@@ -189,3 +189,30 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
 }
 .ladder .pl .riot { display: block; font-size: 12px; font-weight: 500; color: var(--dim); }
 .ladder .d { display: block; margin-left: 0; line-height: 1.2; }
+
+/* Autobalance options */
+.bal { margin: 0 0 12px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); display: grid; gap: 8px; }
+.bal-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.bal-opt { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel2); font-size: 13px; cursor: pointer; }
+.bal-opt b { font-size: 12px; color: var(--muted); font-weight: 600; }
+.bal-opt:hover { border-color: var(--gold); }
+.bal-opt.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.bal-opt.on b { color: var(--gold-hi); }
+.mem .rt { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.mem.ro { cursor: default; }
+.mem.ro:hover { border-color: var(--border); }
+.chip.on { border-color: var(--gold); color: var(--gold-hi); }
+.chip .rm { color: var(--dim); font-size: 11px; margin-left: 4px; }
+.nick { color: var(--muted); font-weight: 500; }
+.chip:disabled { opacity: .4; cursor: default; }
+.chip:disabled:hover { border-color: var(--border); color: inherit; }
+.chip.on { background: var(--gold); border-color: var(--gold); color: #14110a; }
+.chip.on:hover { color: #14110a; }
+/* Balance locks */
+.mem .lk { flex-shrink: 0; width: 26px; height: 26px; margin-right: -6px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-size: 13px; opacity: .45; }
+.mem .lk:hover { opacity: 1; background: var(--bg); }
+.mem .lk.on { opacity: 1; }
+.tbox.blue .mem.locked { border-color: var(--blue); }
+.tbox.red .mem.locked { border-color: var(--red); }
+.chip.on.lock-blue { box-shadow: inset 4px 0 0 var(--blue); }
+.chip.on.lock-red { box-shadow: inset 4px 0 0 var(--red); }

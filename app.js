@@ -4,7 +4,7 @@
  * doesn't expose custom games), stored in data/league.json and published via the GitHub API.
  * Ratings are recomputed from the full game list on every load. */
 
-const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin' };
+const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin', picker: 'cl.picker' };
 // Only the owner edits. Visiting the site once with #admin unlocks editing on that device;
 // everyone else sees a read-only ladder.
 if (location.hash === '#admin') { try { localStorage.setItem(LS.admin, '1'); } catch { /* ignore */ } history.replaceState(null, '', location.pathname + location.search); }
@@ -38,7 +38,7 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
+const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false, picker: (b => (b && Array.isArray(b.ids) ? { extra: [], flips: [], opt: 0, locks: {}, ...b } : null))(store.get(LS.picker)) };
 
 
 const resolveId = id => resolveWith(S.stats?.links || {}, id);
@@ -186,12 +186,15 @@ function toast(msg, err = false) {
   const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ''; }, err ? 5000 : 2600);
 }
-// Short Riot game name for any account (alts show as their main). Nicknames are ladder-only.
-function dn(id) { return (S.stats.P[keyOf(resolveId(id))]?.id || id).split('#')[0]; }
+// Everywhere a player is named: full Riot ID, then their real name in parentheses if one is set,
+// e.g. "ArsDerps#NA1 (Arjun)". Alt accounts show as their main.
+const who = id => S.stats.P[keyOf(resolveId(id))] || { id };
+function fullName(id) { const p = who(id); return p.nick ? `${p.id} (${p.nick})` : p.id; }
 function nameHtml(id) {
   const [n, t] = id.split('#');
   return `${esc(n)}<span class="tag">#${esc(t)}</span>`;
 }
+function fullNameHtml(id) { const p = who(id); return nameHtml(p.id) + (p.nick ? ` <span class="nick">(${esc(p.nick)})</span>` : ''); }
 function renderBanner() {
   const b = $('#banner');
   if (!S.dirty) { b.innerHTML = ''; return; }
@@ -208,7 +211,7 @@ function render() {
   $('#leagueName').textContent = LEAGUE_NAME;
   document.title = LEAGUE_NAME;
   renderBanner();
-  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + viewLadder() + (S.showLinks && canEdit() ? viewLinks() : '') + viewGames();
+  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + (S.picker ? viewPicker() : '') + viewLadder() + (S.showLinks && canEdit() ? viewLinks() : '') + viewGames();
 }
 
 function viewLadder() {
@@ -219,9 +222,9 @@ function viewLadder() {
     <tbody>${ladder.map((p, i) => `<tr>
       <td class="rk">${i + 1}</td>
       <td class="em">${emblemSvg(rankOf(p.rating, i))}</td>
-      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">${p.nick ? `${esc(p.nick)}<span class="riot">${esc(p.id)}</span>` : nameHtml(p.id)}</a>
+      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">${fullNameHtml(p.id)}</a>
         <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
-        ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a.split('#')[0])).join(', ')}</div>` : ''}</td>
+        ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a)).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
       <td class="r num"><span class="rating">${p.rating}</span>${p.last ? `<span class="d ${p.last > 0 ? 'pos' : 'neg'}" title="Rating change from their last game">${signed(p.last)}</span>` : ''}</td>
     </tr>`).join('')}</tbody></table>
@@ -241,7 +244,7 @@ function groupGames() {
 }
 
 function awardsLine(games) {
-  const nm = id => esc(dn(id));
+  const nm = id => esc(fullName(id));
   const tag = i => (games.length > 1 ? ` <span class="dim">G${i + 1}</span>` : '');
   const parts = [];
   games.forEach((g, i) => {
@@ -256,7 +259,7 @@ function viewGames() {
   const groups = groupGames();
   if (!groups.length) return '';
   const shown = S.showAll ? groups : groups.slice(0, 5);
-  const names = ids => ids.map(id => esc(dn(id))).join(', ');
+  const names = ids => ids.map(id => esc(fullName(id))).join(', ');
   return `<div class="card"><h2>Recent games</h2>
     ${shown.map(gr => {
       const g0 = gr.games[0], n = gr.games.length;
@@ -305,6 +308,96 @@ function addNew() {
 }
 function gamesByIds(ids) { return S.stats.ordered.filter(g => ids.includes(g.id)); }
 
+// ----- autobalance: anyone can pick the 10 players and get 5 fair splits (algorithm in core.js) -----
+// Works for viewers too: nothing here is saved to the ladder. Admins can send a split to the record form.
+const ratingOf = id => S.stats.P[keyOf(resolveId(id))]?.rating ?? START;
+const sameP = (a, b) => keyOf(resolveId(a)) === keyOf(resolveId(b));
+const avgRating = ids => ids.reduce((s, id) => s + ratingOf(id), 0) / ids.length;
+const BAL_N = 10;
+const byName = (a, b) => fullName(a).localeCompare(fullName(b), undefined, { sensitivity: 'base' });
+function savePicker() { store.set(LS.picker, S.picker); }
+// Without locks the algorithm always lists the same player first, so each option gets a random (but stable)
+// side flip, re-rolled whenever the group of 10 changes. That way nobody is stuck on Team 1.
+// With locks the sides are fixed by the locks, so there's no flip.
+function rollFlips() { S.picker.flips = Array.from({ length: 5 }, () => Math.random() < 0.5); }
+const lockOf = id => S.picker.locks[keyOf(resolveId(id))] || null;
+function balOptions() {
+  const b = S.picker;
+  if (b.ids.length !== BAL_N) return [];
+  const ids = [...b.ids].sort(byName);
+  const players = ids.map(id => ({ id, rating: ratingOf(id), side: lockOf(id) }));
+  const flip = !players.some(p => p.side);
+  return balanceTeams(players)
+    .map((o, i) => (flip && (b.flips || [])[i] ? { ...o, blue: o.red, red: o.blue, p: 1 - o.p } : o));
+}
+// Lock a player to a team (side) or unlock them (side = null). Keeps showing the same split when it still fits.
+function balLock(id, side) {
+  const b = S.picker, k = keyOf(resolveId(id));
+  if (side && b.ids.filter(x => !sameP(x, id) && lockOf(x) === side).length >= BAL_N / 2) return toast(`${TEAM[side]} already has ${BAL_N / 2} locked players.`, true);
+  const before = balOptions()[b.opt], teamKey = ids => ids.map(x => keyOf(resolveId(x))).sort().join('|');
+  if (side) b.locks[k] = side; else delete b.locks[k];
+  const after = balOptions();
+  const keep = before ? after.findIndex(o => teamKey(o.blue) === teamKey(before.blue)) : -1;
+  b.opt = keep >= 0 ? keep : 0;
+  savePicker(); render();
+}
+function balToggle(id) {
+  const b = S.picker;
+  if (b.ids.some(x => sameP(x, id))) { b.ids = b.ids.filter(x => !sameP(x, id)); delete b.locks[keyOf(resolveId(id))]; }
+  else if (b.ids.length >= BAL_N) return toast(`That's ${BAL_N} already. Tap someone to swap them out.`, true);
+  else b.ids.push(id);
+  b.opt = 0; rollFlips(); savePicker(); render();
+  if (b.ids.length === BAL_N) $('#balResults')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function balAddNew() {
+  const el = $('#balPlayer'), id = parseRiotId(el.value);
+  if (!id) { el.classList.add('bad'); return toast('Use Riot ID format: Name#TAG', true); }
+  const known = S.stats.P[keyOf(resolveId(id))]?.id || id;
+  const b = S.picker;
+  if (!S.stats.P[keyOf(resolveId(id))] && !b.extra.some(x => sameP(x, id))) b.extra.push(known);
+  if (!b.ids.some(x => sameP(x, known))) balToggle(known); else { savePicker(); render(); }
+  setTimeout(() => $('#balPlayer')?.focus(), 0);
+}
+function viewPicker() {
+  const b = S.picker, n = b.ids.length, full = n === BAL_N;
+  // Every player stays in the same place (alphabetical); tapping only highlights them, so nothing moves.
+  const all = [...Object.values(S.stats.P).map(p => p.id), ...b.extra].sort(byName);
+  const opts = balOptions(), o = opts[Math.min(b.opt, opts.length - 1)];
+  const pct = x => Math.round(x * 100);
+  const col = (side, ids) => `<div class="tbox ${side}"><div class="tbox-head"><h3>${TEAM[side]}</h3><span class="small muted num">avg ${Math.round(avgRating(ids))}</span></div>
+      ${[...ids].sort((x, y) => ratingOf(y) - ratingOf(x)).map(id => {
+        const lk = lockOf(id);
+        return `<div class="mem ro ${lk ? 'locked' : ''}"><span class="nm">${esc(fullName(id))}</span><span class="rt num">${Math.round(ratingOf(id))}</span>
+          ${lk ? `<button class="lk" data-act="bal-lock" data-id="${esc(id)}" data-side="${other(side)}" title="Move to ${TEAM[other(side)]} (stays locked)" aria-label="Move to ${TEAM[other(side)]}">⇄</button>` : ''}
+          <button class="lk ${lk ? 'on' : ''}" data-act="bal-lock" data-id="${esc(id)}" data-side="${lk ? '' : side}" title="${lk ? 'Unlock' : `Lock to ${TEAM[side]}`}" aria-label="${lk ? 'Unlock' : `Lock to ${TEAM[side]}`}">${lk ? '🔒' : '🔓'}</button></div>`;
+      }).join('')}</div>`;
+  const nLocked = b.ids.filter(lockOf).length;
+  return `<div class="card form" id="picker">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Balance teams</h2>
+      <button class="btn sm" data-act="close-balance">Close</button></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <span class="small">Tap the ${BAL_N} players · <b class="num ${full ? 'pos' : ''}">${n}/${BAL_N}</b> picked</span>
+      <button class="link small" data-act="bal-clear" ${n ? '' : 'disabled'}>Clear</button></div>
+    <div class="chips">${all.map(id => {
+      const on = b.ids.some(x => sameP(x, id));
+      const lk = on && lockOf(id);
+      return `<button class="chip ${on ? 'on' : ''} ${lk ? `lock-${lk}` : ''}" data-act="bal-toggle" data-id="${esc(id)}" ${!on && full ? 'disabled' : ''} ${lk ? `title="Locked to ${TEAM[lk]}"` : ''}>${lk ? '🔒 ' : ''}${esc(fullName(id))}</button>`;
+    }).join('')}</div>
+    <div class="row nowrap" style="margin-top:8px"><input id="balPlayer" list="playerList" placeholder="Not listed? Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
+      <button class="btn" data-act="bal-add-new">Add</button></div>
+    <div id="balResults">${o ? `<div class="bal" style="margin-top:14px">
+      <div class="small muted">Each option gives both teams an even mix of strong and weak players, then gets as close to 50/50 as it can. Players not on the ladder count as ${START}. Tap 🔓 to lock someone to their team, then ⇄ to move them across.</div>
+      <div class="bal-opts">${opts.map((x, i) => `<button class="bal-opt ${x === o ? 'on' : ''}" data-act="bal-opt" data-i="${i}">
+        <b>Option ${i + 1}</b><span class="num"><span class="blue-t">${pct(x.p)}</span>–<span class="red-t">${100 - pct(x.p)}</span></span></button>`).join('')}</div>
+      <div class="row" style="justify-content:space-between"><span class="small">${TEAM.blue} win chance <b class="num">${pct(o.p)}%</b></span>
+        ${nLocked ? `<button class="link small" data-act="bal-unlock-all">Unlock all (${nLocked})</button>` : ''}</div>
+      ${nLocked && opts.length < 5 ? `<div class="small muted">Only ${opts.length} distinct option${opts.length > 1 ? 's' : ''} with these locks.</div>` : ''}
+      <div class="tboxes">${col('blue', o.blue)}${col('red', o.red)}</div>
+      ${canEdit() ? `<div class="row end"><button class="btn sm gold" data-act="bal-record">Record with these teams</button></div>` : ''}
+    </div>` : ''}</div>
+  </div>`;
+}
+
 function viewForm() {
   const f = S.form, P = S.stats.P;
   const inForm = new Set([...f.blue, ...f.red].map(x => keyOf(resolveId(x))));
@@ -313,7 +406,7 @@ function viewForm() {
   const team = side => `<div class="tbox ${side} ${f.active === side ? 'active' : ''}" data-act="set-active" data-side="${side}">
       <div class="tbox-head"><h3>${TEAM[side]}</h3><span class="small muted">${f[side].length}/5</span></div>
       ${f[side].map(id => `<button class="mem" data-act="unpick" data-side="${side}" data-id="${esc(id)}" title="Remove">
-        <span class="nm">${esc(dn(id))}</span><span class="rm">✕</span></button>`).join('')}
+        <span class="nm">${esc(fullName(id))}</span><span class="rm">✕</span></button>`).join('')}
       ${Array(Math.max(0, 5 - f[side].length)).fill('<div class="mem empty"></div>').join('')}</div>`;
   const bw = f.results.filter(r => r === 'blue').length, rw = f.results.length - bw;
   const n = f.results.length;
@@ -333,7 +426,7 @@ function viewForm() {
 
     <div class="pool">
       <div class="small muted" style="margin-bottom:6px">${pool.length ? `Tap a player to add them to <b class="${f.active}-t">${TEAM[f.active]}</b>` : P && Object.keys(P).length ? 'Everyone is on a team.' : 'Add players by Riot ID — next time they’ll be one tap away.'}</div>
-      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}" title="${esc(p.id)}">${esc(p.id.split('#')[0])}</button>`).join('')}</div>
+      <div class="chips">${pool.map(p => `<button class="chip" data-act="pick" data-id="${esc(p.id)}" title="${esc(p.id)}">${esc(fullName(p.id))}</button>`).join('')}</div>
       <div class="row nowrap" style="margin-top:8px"><input id="newPlayer" list="playerList" placeholder="New player — Name#TAG" autocomplete="off" spellcheck="false" style="margin:0">
         <button class="btn" data-act="add-new">Add</button></div>
     </div>
@@ -343,7 +436,7 @@ function viewForm() {
       <button class="btn red" data-act="result" data-side="red">${TEAM.red} won</button></div>
     ${n ? `<div class="results-list">${f.results.map((r, i) => {
       const a = awardOf(f, i);
-      const opts = (list, sel) => '<option value="">—</option>' + list.map(id => `<option value="${esc(id)}" ${sel && keyOf(id) === keyOf(sel) ? 'selected' : ''}>${esc(dn(id))}</option>`).join('');
+      const opts = (list, sel) => '<option value="">—</option>' + list.map(id => `<option value="${esc(id)}" ${sel && keyOf(id) === keyOf(sel) ? 'selected' : ''}>${esc(fullName(id))}</option>`).join('');
       return `<div class="result-row"><button class="res ${r}" data-act="unresult" data-i="${i}" title="Remove game ${i + 1}">G${i + 1} · ${TEAM[r]} won <span class="rm">✕</span></button>
         <label class="aw mvp">★ MVP <select data-award="mvp" data-i="${i}" aria-label="Game ${i + 1} MVP">${opts(f[r], a.mvp)}</select></label>
         <label class="aw ace">◆ ACE <select data-award="ace" data-i="${i}" aria-label="Game ${i + 1} ACE">${opts(f[other(r)], a.ace)}</select></label></div>`;
@@ -651,6 +744,24 @@ document.addEventListener('click', async e => {
     }
     case 'swap': { const f = S.form; [f.blue, f.red] = [f.red, f.blue]; f.results = f.results.map(other); saveFormState(); render(); break; }
     case 'clear-teams': Object.assign(S.form, { blue: [], red: [], active: 'blue' }); saveFormState(); render(); break;
+    case 'open-balance':
+      if (!S.picker) S.picker = { ids: [], extra: [], opt: 0, flips: [], locks: {} };
+      savePicker(); render(); $('#picker')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      break;
+    case 'close-balance': S.picker = null; store.del(LS.picker); render(); break;
+    case 'bal-toggle': balToggle(id); break;
+    case 'bal-clear': Object.assign(S.picker, { ids: [], locks: {}, opt: 0 }); savePicker(); render(); break;
+    case 'bal-lock': balLock(id, a.dataset.side || null); break;
+    case 'bal-unlock-all': S.picker.locks = {}; S.picker.opt = 0; savePicker(); render(); break;
+    case 'bal-add-new': balAddNew(); break;
+    case 'bal-opt': S.picker.opt = Number(a.dataset.i); savePicker(); render(); break;
+    case 'bal-record': {
+      const o = balOptions()[S.picker.opt];
+      if (!o) break;
+      S.form = emptyForm(o); fixActive(S.form); S.picker = null; store.del(LS.picker);
+      saveFormState(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+      break;
+    }
     case 'result':
       if (S.form.results.length >= 7) return toast('Max 7 games at once.', true);
       S.form.results.push(a.dataset.side); saveFormState(); render(); break;
@@ -699,13 +810,14 @@ document.addEventListener('click', async e => {
 
 document.addEventListener('input', e => {
   const el = e.target;
-  if (el.id === 'newPlayer') el.classList.remove('bad');
+  if (el.id === 'newPlayer' || el.id === 'balPlayer') el.classList.remove('bad');
   if (S.form && el.dataset.f === 'date') { S.form.date = el.value; saveFormState(); }
   if (S.form && el.dataset.award) { awardOf(S.form, Number(el.dataset.i))[el.dataset.award] = el.value; saveFormState(); }
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   if (e.target.id === 'newPlayer') { e.preventDefault(); addNew(); }
+  if (e.target.id === 'balPlayer') { e.preventDefault(); balAddNew(); }
   if (e.target.dataset?.pending != null) { e.preventDefault(); addPending(Number(e.target.dataset.pending)); }
   if (e.target.id === 'ghToken') { e.preventDefault(); $('[data-act=save-key]').click(); }
 });
