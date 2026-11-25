@@ -264,3 +264,8 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
   .crop-side { flex-direction: row; justify-content: center; }
   .crop-prev { width: 84px; height: 84px; }
 }
+.crop-fill { gap: 8px; align-items: center; margin: -4px 0 12px; }
+.sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); padding: 0; cursor: pointer; flex-shrink: 0; }
+.sw.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(200,170,110,.35); }
+.sw.pick { position: relative; overflow: hidden; margin: 0; background: conic-gradient(#f55, #fd5, #5f8, #5cf, #a6f, #f55); }
+.sw.pick input { position: absolute; inset: -6px; width: 40px; height: 40px; opacity: 0; cursor: pointer; margin: 0; padding: 0; border: 0; }

@@ -726,25 +726,27 @@ async function adjustCrown() {
 // Drag to move, slider / wheel to zoom; the dark mask shows what the hexagon frame hides.
 function openCropper(img) {
   const OUT = 320, w = img.naturalWidth, h = img.naturalHeight, base = Math.min(w, h);
-  const st = { zoom: 1, cx: w / 2, cy: h > w ? (h - base) * 0.2 + base / 2 : h / 2 };
+  const st = { zoom: 1, cx: w / 2, cy: h > w ? (h - base) * 0.2 + base / 2 : h / 2, fill: edgeColor(img) };
+  const ZMIN = 0.4, ZMAX = 5;
   const side = () => base / st.zoom;
+  // The picture may move past the frame's edges (empty space gets the fill color), but its centre stays on the picture.
   const clampPos = () => {
-    const half = side() / 2;
-    st.cx = Math.min(w - half, Math.max(half, st.cx));
-    st.cy = Math.min(h - half, Math.max(half, st.cy));
+    st.cx = Math.min(w, Math.max(0, st.cx));
+    st.cy = Math.min(h, Math.max(0, st.cy));
   };
   const hex = hexPts(25.5);
   const wrap = document.createElement('div');
   wrap.className = 'crop-wrap';
   wrap.innerHTML = `<div class="card crop-card" role="dialog" aria-modal="true" aria-label="Position the #1 picture">
     <h2>Position the #1 picture</h2>
-    <p class="hint" style="margin-top:0">Drag the picture to move it. Use the slider (or scroll) to zoom. The dark area is hidden by the frame.</p>
+    <p class="hint" style="margin-top:0">Drag the picture to move it, even past the edges. Use the slider (or scroll) to zoom in or out. Empty space gets the fill color below. The dark area is hidden by the frame.</p>
     <div class="crop-main">
       <div class="crop-stage"><canvas width="${OUT}" height="${OUT}"></canvas>
         <svg viewBox="6.5 6.5 51 51" aria-hidden="true"><path fill-rule="evenodd" fill="rgba(5,7,13,.7)" d="M6.5 6.5h51v51h-51zM${hex.replace(/ /g, 'L')}z"/><polygon points="${hex}" fill="none" stroke="#f0c75e" stroke-width=".5"/></svg></div>
       <div class="crop-side"><div class="small muted">Preview</div><div class="crop-prev"></div><div class="crop-prev sm"></div></div>
     </div>
-    <div class="row nowrap crop-zoom"><span class="muted">−</span><input type="range" min="1" max="5" step="0.01" value="1" aria-label="Zoom"><span class="muted">+</span></div>
+    <div class="row nowrap crop-zoom"><span class="muted">−</span><input type="range" min="0.4" max="5" step="0.01" value="1" aria-label="Zoom"><span class="muted">+</span></div>
+    <div class="row crop-fill"><span class="small muted">Empty space:</span>${['#ffffff', '#000000', '#121a2c', '#f0c75e'].map(c => `<button class="sw" data-fill="${c}" style="background:${c}" title="${c}" aria-label="Fill ${c}"></button>`).join('')}<label class="sw pick" title="Pick any color"><input type="color" aria-label="Pick a fill color"></label><button class="link small" data-fill="auto">Match picture</button></div>
     <div class="row end"><button class="btn" data-c="cancel">Cancel</button><button class="btn" data-c="reset">Reset</button><button class="btn gold" data-c="save">Save</button></div>
   </div>`;
   document.body.appendChild(wrap);
@@ -754,8 +756,11 @@ function openCropper(img) {
   const draw = () => {
     clampPos();
     const sd = side();
-    ctx.clearRect(0, 0, OUT, OUT);
-    ctx.drawImage(img, st.cx - sd / 2, st.cy - sd / 2, sd, sd, 0, 0, OUT, OUT);
+    const k = OUT / sd;
+    ctx.fillStyle = st.fill; ctx.fillRect(0, 0, OUT, OUT);
+    ctx.drawImage(img, (sd / 2 - st.cx) * k, (sd / 2 - st.cy) * k, w * k, h * k);
+    wrap.querySelectorAll('[data-fill]').forEach(b => b.classList.toggle('on', b.dataset.fill === st.fill));
+    wrap.querySelector('input[type=color]').value = st.fill;
     clearTimeout(prevTimer);
     prevTimer = setTimeout(() => {
       const saved = CROWN_IMG; CROWN_IMG = cv.toDataURL('image/jpeg', 0.8);
@@ -764,7 +769,7 @@ function openCropper(img) {
     }, 60);
   };
   const setZoom = (z, fx = 0.5, fy = 0.5) => { // keep the point under (fx, fy) of the stage in place
-    const before = side(); st.zoom = Math.min(5, Math.max(1, z));
+    const before = side(); st.zoom = Math.min(ZMAX, Math.max(ZMIN, z));
     const after = side();
     st.cx += (fx - 0.5) * (before - after); st.cy += (fy - 0.5) * (before - after);
     range.value = st.zoom; draw();
@@ -785,6 +790,7 @@ function openCropper(img) {
     setZoom(st.zoom * Math.exp(-e.deltaY / 400), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   }, { passive: false });
   range.addEventListener('input', () => setZoom(Number(range.value)));
+  wrap.querySelector('input[type=color]').addEventListener('input', e => { st.fill = e.target.value; draw(); });
   const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
@@ -792,6 +798,7 @@ function openCropper(img) {
     const c = e.target.closest('[data-c]')?.dataset.c;
     if (e.target === wrap || c === 'cancel') close();
     else if (c === 'reset') { st.zoom = 1; st.cx = w / 2; st.cy = h / 2; range.value = 1; draw(); }
+    else if (e.target.closest('[data-fill]')) { const f = e.target.closest('[data-fill]').dataset.fill; st.fill = f === 'auto' ? edgeColor(img) : f; draw(); }
     else if (c === 'save') {
       let url = cv.toDataURL('image/webp', 0.88);
       if (!url.startsWith('data:image/webp')) url = cv.toDataURL('image/png');
@@ -799,6 +806,15 @@ function openCropper(img) {
     }
   });
   draw();
+}
+function edgeColor(img) {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 24;
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0, 24, 24);
+    const d = x.getImageData(0, 0, 24, 24).data; let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < 24; i++) for (const [px, py] of [[i, 0], [i, 23], [0, i], [23, i]]) { const o = (py * 24 + px) * 4; r += d[o]; g += d[o + 1]; b += d[o + 2]; n++; }
+    return '#' + [r, g, b].map(v => Math.round(v / n).toString(16).padStart(2, '0')).join('');
+  } catch { return '#121a2c'; }
 }
 async function saveCrown(url) {
   const c = ghCfg();
