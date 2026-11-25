@@ -38,7 +38,7 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false };
+const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false, page: null };
 store.del(LS.picker); // the old separate Balance screen's saved state
 
 
@@ -238,6 +238,18 @@ function renderBanner() {
     <button class="btn sm gold" data-act="publish" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Publishing…' : 'Publish'}</button></div>`;
 }
 const canEdit = () => store.get(LS.admin) === 1 || !!ghCfg().token;
+// Player pages live at #p/<Riot ID>, so they can be linked and the back button works.
+// Tabs live at #rankings (default), #history and #games, so each can be linked and the back button works.
+const TABS = [['rankings', 'Rankings'], ['history', 'Rating history'], ['games', 'Games']];
+function route() {
+  const m = location.hash.match(/^#p\/(.+)$/);
+  let id = null; if (m) { try { id = decodeURIComponent(m[1]); } catch { id = m[1]; } }
+  S.page = id; // resolved to a player (alts → main) at render time, once the data has loaded
+  const t = location.hash.slice(1);
+  if (!id) S.tab = TABS.some(([k]) => k === t) ? t : 'rankings';
+}
+route();
+window.addEventListener('hashchange', () => { route(); if (S.data) { render(); window.scrollTo(0, 0); } });
 function render() {
   const st = S.data.settings;
   $('#recordBtn').hidden = !canEdit();
@@ -245,7 +257,15 @@ function render() {
   $('#leagueName').textContent = LEAGUE_NAME;
   document.title = LEAGUE_NAME;
   renderBanner();
-  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.form ? viewForm() : '') + viewLadder() + (S.showLinks && canEdit() ? viewLinks() : '') + viewGames();
+  const tab = { rankings: () => viewLadder() + (S.showLinks && canEdit() ? viewLinks() : ''), history: viewHistory, games: viewGames }[S.tab] || viewLadder;
+  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.page ? viewPlayer(keyOf(resolveId(S.page)))
+    : (S.form ? viewForm() : '') + viewTabs() + tab());
+  drawCharts();
+}
+
+function viewTabs() {
+  return `<nav class="tabs" aria-label="Sections">${TABS.map(([k, label]) =>
+    `<a class="tab ${S.tab === k ? 'on' : ''}" href="#${k}" ${S.tab === k ? 'aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
 }
 
 function viewLadder() {
@@ -257,7 +277,7 @@ function viewLadder() {
     <tbody>${rest.map((p, j) => { const i = j + 3; return `<tr>
       <td class="rk">${i + 1}</td>
       <td class="em">${emblemSvg(rankOf(p.rating, i))}</td>
-      <td class="pl"><a href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">${fullNameHtml(p.id)}</a>
+      <td class="pl"><a href="${playerHref(p.id)}" title="${esc(p.id)}: stats and rating history">${fullNameHtml(p.id)}</a>
         <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a)).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
@@ -273,7 +293,7 @@ function viewPodium(ladder, region) {
   const order = [1, 0, 2].filter(i => ladder[i]);
   return `<div class="podium">${order.map(i => {
     const p = ladder[i], ri = rankOf(p.rating, i), r = RANKS[ri];
-    return `<a class="pod p${i + 1}" href="${opgg(p.id, region)}" target="_blank" rel="noopener" title="${esc(p.id)} on op.gg">
+    return `<a class="pod p${i + 1}" href="${playerHref(p.id)}" title="${esc(p.id)}: stats and rating history">
       <div class="pod-emb">${emblemSvg(ri)}</div>
       <div class="pod-name">${esc(displayName(p))}</div>
       ${p.nick ? `<div class="pod-id">${esc(p.id)}</div>` : `<div class="pod-id">#${esc(p.id.split('#')[1])}</div>`}
@@ -294,44 +314,52 @@ function groupGames() {
   return out;
 }
 
-function awardsLine(games) {
-  const nm = id => esc(fullName(id));
-  const tag = i => (games.length > 1 ? ` <span class="dim">G${i + 1}</span>` : '');
-  const parts = [];
-  games.forEach((g, i) => {
-    if (g.mvp) parts.push(`<span class="mvp">★ MVP ${nm(g.mvp)}</span>${tag(i)}`);
-    if (g.ace) parts.push(`<span class="ace">◆ ACE ${nm(g.ace)}</span>${tag(i)}`);
-  });
-  return parts.length ? `<div class="meta awards">${parts.join(' · ')}</div>` : '';
+// One match card: details on the left; each team a tight column of five rows, tinted by result.
+function matchCard(gr, me = null) {
+  const { P, ordered } = S.stats, num = g => ordered.indexOf(g) + 1;
+  const gs = gr.games, g0 = gs[0], n = gs.length, ids = new Set(gs.map(g => g.id));
+  const wins = { blue: gs.filter(g => g.winner === 'blue').length }; wins.red = n - wins.blue;
+  // One row: rank emblem (as of after this match), name, MVP/ACE, rating after, change over the match.
+  const row = id => {
+    const p = P[keyOf(resolveId(id))], es = p ? p.hist.filter(e => ids.has(e.game)) : [];
+    const d = es.reduce((a, e) => a + e.delta, 0), after = es.length ? es[es.length - 1].rating : START;
+    const mvp = es.filter(e => e.award === 'mvp').length, ace = es.filter(e => e.award === 'ace').length;
+    const w = who(id);
+    return { after, html: `<a class="pr ${me && keyOf(resolveId(id)) === me ? 'me' : ''}" href="${playerHref(id)}" title="${esc(fullName(id))}: ${signed(d)} → ${after}">
+      <span class="pr-emb">${emblemSvg(rankIdx(after))}</span>
+      <span class="pr-nm">${esc(w.id.split('#')[0])}</span>
+      <span class="pr-aw">${mvp ? `<span class="mvp">★${mvp > 1 ? mvp : ''}</span>` : ''}${ace ? `<span class="ace">◆${ace > 1 ? ace : ''}</span>` : ''}</span>
+      <span class="pr-rt num">${after}</span><b class="pr-d num ${d > 0 ? 'pos' : d < 0 ? 'neg' : 'muted'}">${signed(d)}</b></a>` };
+  };
+  const team = side => {
+    const res = wins[side] > wins[other(side)] ? 'win' : wins[side] < wins[other(side)] ? 'loss' : 'tie';
+    const rows = g0[side].map(row).sort((a, b) => b.after - a.after);
+    return `<div class="mt ${res}"><div class="mt-h"><span>${TEAM[side]}</span><b>${res === 'win' ? 'Win' : res === 'loss' ? 'Loss' : 'Tie'}${n > 1 ? ` ${wins[side]}–${wins[other(side)]}` : ''}</b></div>${rows.map(r => r.html).join('')}</div>`;
+  };
+  const nums = gs.map(num), idList = gs.map(g => g.id).join(',');
+  // On a player's page (me = their key), the card shows the match from their side: Win/Loss and a colored edge.
+  const mySide = me && ['blue', 'red'].find(sd => g0[sd].some(id => keyOf(resolveId(id)) === me));
+  const myRes = mySide && (wins[mySide] > wins[other(mySide)] ? 'win' : wins[mySide] < wins[other(mySide)] ? 'loss' : 'tie');
+  return `<div class="mc ${myRes ? `mine ${myRes}` : ''}">
+    <div class="mc-meta">
+      ${myRes ? `<span class="mc-res">${myRes === 'win' ? 'Win' : myRes === 'loss' ? 'Loss' : 'Tie'}${n > 1 ? ` ${wins[mySide]}–${wins[other(mySide)]}` : ''}</span>` : ''}
+      <b>${n > 1 ? `Games ${nums[0]}–${nums[n - 1]}` : `Game ${nums[0]}`}</b>
+      <span>${esc(fmtDate(g0.date))}</span>
+      ${n > 1 ? `<span class="mc-series">${gs.map((g, i) => `<i class="${g.winner === 'blue' ? 'b' : 'r'}" title="Game ${i + 1}: ${TEAM[g.winner]} won">${g.winner === 'blue' ? 1 : 2}</i>`).join('')}</span>` : ''}
+      ${canEdit() ? `<span class="mc-act"><button class="x" data-act="rematch" data-ids="${esc(idList)}" title="Record more games with these teams">↺</button><button class="x" data-act="edit" data-ids="${esc(idList)}" title="Edit">✎</button><button class="x" data-act="delete" data-ids="${esc(idList)}" title="Delete">✕</button></span>` : ''}
+    </div>
+    ${team('blue')}${team('red')}
+  </div>`;
 }
 
+// Match history in the style of op.gg / u.gg: one compact card per match (a game, or a series recorded together),
+// newest first. Details on the left; each team is a tight column of five rows, tinted by result.
 function viewGames() {
-  const { deltas, P } = S.stats;
   const groups = groupGames();
-  if (!groups.length) return '';
-  const shown = S.showAll ? groups : groups.slice(0, 5);
-  const names = ids => ids.map(id => esc(fullName(id))).join(', ');
-  return `<div class="card"><h2>Recent games</h2>
-    ${shown.map(gr => {
-      const g0 = gr.games[0], n = gr.games.length;
-      const bw = gr.games.filter(g => g.winner === 'blue').length, rw = n - bw;
-      const top = bw > rw || (bw === rw && n > 1) ? 'blue' : 'red', bot = top === 'blue' ? 'red' : 'blue';
-      const tw = top === 'blue' ? bw : rw, lw = n - tw;
-      const net = gr.games.reduce((a, g) => a + deltas[g.id][top], 0);
-      const tie = tw === lw;
-      const score = n > 1 ? ` ${tw}–${lw}` : '';
-      const ids = gr.games.map(g => g.id).join(',');
-      return `<div class="game"><div class="teams">
-          <div class="side">${tie ? `<b>Tied${score}</b>` : `<b class="pos">Won${score}</b>`} · ${names(g0[top])}</div>
-          <div class="side muted">${tie ? `Tied${score}` : `Lost${n > 1 ? ` ${lw}–${tw}` : ''}`} · ${names(g0[bot])}</div>
-          <div class="meta">${n > 1 ? `${n} games · ` : ''}${fmtDate(g0.date)} · ${signed(net)} / ${signed(-net)}</div>
-          ${awardsLine(gr.games)}</div>
-        ${canEdit() ? `<div class="right"><button class="x" data-act="rematch" data-ids="${esc(ids)}" title="Record more games with these teams">Rematch</button>
-          <button class="x" data-act="edit" data-ids="${esc(ids)}">Edit</button>
-          <button class="x" data-act="delete" data-ids="${esc(ids)}" title="Delete">✕</button></div>` : ''}</div>`;
-    }).join('')}
-    ${groups.length > 5 ? `<div class="row end" style="margin-top:8px"><button class="link" data-act="toggle-all">${S.showAll ? 'Show less' : `Show all ${groups.length}`}</button></div>` : ''}
-  </div>`;
+  if (!groups.length) return '<div class="card empty">No games yet.</div>';
+  const shown = S.showAll ? groups : groups.slice(0, 20);
+  return `<div class="mlist">${shown.map(gr => matchCard(gr)).join('')}</div>
+    ${groups.length > 20 ? `<div class="row end" style="margin:4px 0 16px"><button class="link" data-act="toggle-all">${S.showAll ? 'Show fewer' : `Show all ${groups.length}`}</button></div>` : ''}`;
 }
 
 // ----- record form: tap players into teams, tap the winner once per game -----
@@ -926,6 +954,7 @@ document.addEventListener('click', async e => {
   switch (act) {
     case 'open-form': case 'open-balance':
       if (!S.form) S.form = emptyForm();
+      if (S.page) { location.hash = S.tab || 'rankings'; break; } // hashchange renders the tabs with the form
       render(); window.scrollTo({ top: 0, behavior: 'smooth' });
       break;
     case 'cancel': S.form = null; store.del(LS.form); render(); break;
@@ -967,12 +996,18 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'delete': {
-      const ids = a.dataset.ids.split(',');
-      if (confirm(ids.length > 1 ? `Delete all ${ids.length} games in this series? Ratings will be recalculated.` : 'Delete this game? Ratings will be recalculated.'))
+      // Spell out which match this is, so a mis-tap on the small ✕ is easy to catch.
+      const ids = a.dataset.ids.split(','), gs = gamesByIds(ids);
+      const nums = gs.map(g => S.stats.ordered.indexOf(g) + 1);
+      const what = gs.length > 1 ? `all ${gs.length} games of this series (games ${nums[0]}–${nums[nums.length - 1]}, ${fmtDate(gs[0].date)})` : `game ${nums[0]} (${gs[0] ? fmtDate(gs[0].date) : ''})`;
+      const teams = gs[0] ? `\n\n${TEAM.blue}: ${gs[0].blue.map(id => who(id).id.split('#')[0]).join(', ')}\n${TEAM.red}: ${gs[0].red.map(id => who(id).id.split('#')[0]).join(', ')}` : '';
+      if (confirm(`Delete ${what}?${teams}\n\nEveryone's ratings will be recalculated without it.`))
         commit(d => { d.games = d.games.filter(g => !ids.includes(g.id)); }, 'Deleted.');
       break;
     }
     case 'toggle-all': S.showAll = !S.showAll; render(); break;
+    case 'sel-toggle': toggleSel(a.dataset.k); break;
+    case 'sel-clear': setSel([]); break;
     case 'crown-pick': $('#crownFile').click(); break;
     case 'crown-adjust': adjustCrown(); break;
     case 'crown-reset': if (confirm('Go back to the drawn #1 emblem?')) resetCrown(); break;

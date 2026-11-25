@@ -62,7 +62,7 @@ function compute(data) {
   const P = {};        // key -> { id, rating, wins, losses, last }
   const deltas = {};   // game id -> { blue, red }
   const ordered = data.games.map((g, i) => ({ g, i })).sort((a, b) => a.g.date.localeCompare(b.g.date) || a.i - b.i).map(x => x.g);
-  const get = id => { id = resolveWith(links, id); return P[keyOf(id)] || (P[keyOf(id)] = { id, rating: START, wins: 0, losses: 0, last: 0, seen: 0, alts: [] }); };
+  const get = id => { id = resolveWith(links, id); return P[keyOf(id)] || (P[keyOf(id)] = { id, rating: START, wins: 0, losses: 0, last: 0, seen: 0, alts: [], hist: [] }); };
   let n = 0;
   for (const g of ordered) {
     n++;
@@ -77,6 +77,8 @@ function compute(data) {
       for (const p of team) {
         const dp = keyOf(p.id) === awardKey ? Math.round(won ? d * AWARD : d / AWARD) : d;
         p.rating += dp; p.last = dp; p.seen = n; won ? p.wins++ : p.losses++;
+        // Rating history for charts and player pages: n is the game's number (1-based) in date order.
+        p.hist.push({ n, game: g.id, date: g.date, won, delta: dp, rating: p.rating, award: keyOf(p.id) === awardKey ? (won ? 'mvp' : 'ace') : null });
       }
     }
   }
