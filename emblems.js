@@ -101,15 +101,35 @@ const EMBLEM_GLYPHS = [
 // Optional custom #1 picture (uploaded by the admin, path in settings.crownImg), held as a data URL so the
 // emblem also works as a standalone image (the trailer draws emblems onto a canvas).
 let CROWN_IMG = null;
+// Where to find it, fastest first: this device's saved copy, the GitHub Pages copy, then the repo itself
+// (raw.githubusercontent.com has a new picture the moment it's saved, while Pages takes about a minute to deploy it).
+const CROWN_CACHE = 'cl.crownImg';
+function crownRawUrl(path) {
+  const h = location.hostname; let owner = 'conradcsoares', repo = 'gragas-superserver';
+  if (h.endsWith('.github.io')) {
+    owner = h.split('.')[0];
+    const seg = location.pathname.split('/').filter(Boolean)[0];
+    repo = seg && !seg.includes('.') ? seg : `${owner}.github.io`;
+  }
+  return `https://raw.githubusercontent.com/${owner}/${repo}/main/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+function rememberCrown(path, url) { try { localStorage.setItem(CROWN_CACHE, JSON.stringify({ path, url })); } catch { /* full or blocked */ } }
 async function loadCrownImg(path, fresh = false) {
-  try {
-    // fresh: skip the browser cache, so a retry doesn't get a cached 'not found' from before Pages deployed the file
-    const r = await fetch(path, { cache: fresh ? 'reload' : 'force-cache' });
-    if (!r.ok) return false;
-    const blob = await r.blob();
-    CROWN_IMG = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
-    return true;
-  } catch { return false; }
+  try { const c = JSON.parse(localStorage.getItem(CROWN_CACHE)); if (c && c.path === path && c.url) { CROWN_IMG = c.url; return true; } } catch { /* none */ }
+  // fresh: skip the browser cache, so a retry doesn't get a cached 'not found' from before the file existed
+  for (const src of [path, crownRawUrl(path)]) {
+    try {
+      const r = await fetch(src, { cache: fresh ? 'reload' : 'default' });
+      if (!r.ok) continue;
+      const blob = await r.blob();
+      if (!blob.type.startsWith('image/') && !/\.(webp|png|jpe?g)$/i.test(path)) continue;
+      CROWN_IMG = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+      if (!CROWN_IMG.startsWith('data:image/')) CROWN_IMG = 'data:image/' + (path.endsWith('.png') ? 'png' : 'webp') + ';base64,' + CROWN_IMG.split(',')[1];
+      rememberCrown(path, CROWN_IMG);
+      return true;
+    } catch { /* try the next source */ }
+  }
+  return false;
 }
 const crownPicture = (c, id) => `<image href="${CROWN_IMG}" x="6.5" y="6.5" width="51" height="51" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>
     <polygon points="${hexPts(25.5)}" fill="none" stroke="${c}" stroke-width="1.4"/>`;

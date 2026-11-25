@@ -850,7 +850,7 @@ async function saveCrown(url) {
     const path = `assets/crown-${Date.now().toString(36)}.${ext}`;
     await ghRequest('PUT', { ...c, path }, { message: 'Update #1 picture', content: url.split(',')[1], branch: c.branch });
     const old = S.data.settings.crownImg;
-    CROWN_IMG = url; S.crownShown = S.crownTried = path;
+    CROWN_IMG = url; S.crownShown = S.crownTried = path; rememberCrown(path, url);
     commit(d => { d.settings.crownImg = path; });
     S.busy = false;
     await publish();
