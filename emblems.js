@@ -76,13 +76,26 @@ const EMBLEM_GLYPHS = [
     <path d="M32 46l-7-12h14z" fill="${c}"/>
     <circle cx="32" cy="12.5" r="4" fill="${c}"/><circle cx="51" cy="45.5" r="4" fill="${c}"/><circle cx="13" cy="45.5" r="4" fill="${c}"/>
     <circle cx="32" cy="12.5" r="1.4" fill="${EMBLEM_INK}"/><circle cx="51" cy="45.5" r="1.4" fill="${EMBLEM_INK}"/><circle cx="13" cy="45.5" r="1.4" fill="${EMBLEM_INK}"/>`,
-  // Ayanokoji (#1 only): a crowned, hooded figure in shadow, eyes barely open
-  c => `<path d="M23 18.5l1.5-7 4 4 3.5-6 3.5 6 4-4 1.5 7z" fill="${c}"/>
-    <circle cx="24.5" cy="11.5" r="1.3" fill="#fff"/><circle cx="32" cy="9.5" r="1.4" fill="#fff"/><circle cx="39.5" cy="11.5" r="1.3" fill="#fff"/>
-    <path d="M32 20.5c-8 0-12.5 6-12.5 13 0 3 .8 5.6 2 7.5-5 2-8 5.5-9 10.5h39c-1-5-4-8.5-9-10.5 1.2-1.9 2-4.5 2-7.5 0-7-4.5-13-12.5-13z" fill="${c}"/>
-    <path d="M32 24c-5.5 0-8.5 4.5-8.5 9.5 0 5 3.5 8.5 8.5 8.5s8.5-3.5 8.5-8.5c0-5-3-9.5-8.5-9.5z" fill="${EMBLEM_INK}"/>
-    <path d="M26.5 32.5h4.5M33 32.5h4.5" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/>
-    <path d="M32 42v9.5M27 44l5 3 5-3" fill="none" stroke="${EMBLEM_INK}" stroke-width="1.2" opacity=".5"/>`,
+  // Ayanokoji (#1 only): an original crowned big guy — deadpan stare, double chin, too comfortable at the top
+  c => `<g clip-path="url(#emb13c)">
+      <path d="M13 60c1-10 8-16.5 19-16.5S50 50 51 60z" fill="#1c2131"/>
+      <path d="M26.5 43.5L32 51l5.5-7.5z" fill="#f4f1ea"/>
+      <path d="M30.6 46.5h2.8l1 3.2-2.4 9.3-2.4-9.3z" fill="${c}"/>
+      <path d="M26.5 43.5L22 47M37.5 43.5L42 47" stroke="#0d111c" stroke-width="1.2" opacity=".6"/>
+    </g>
+    <ellipse cx="32" cy="41.2" rx="11" ry="4.6" fill="#e9b893"/>
+    <path d="M23.5 40.2q8.5 6.5 17 0" fill="none" stroke="#c98f6c" stroke-width="1.1" opacity=".8"/>
+    <ellipse cx="32" cy="31" rx="12" ry="11.2" fill="#f3caa6"/>
+    <path d="M23 38.5q9 5.5 18 0" fill="none" stroke="#d9a07c" stroke-width="1.1"/>
+    <path d="M20 31c-.5-8 4.5-12 12-12s12.5 4 12 12c-1.5-3.5-3-4.8-5-5.4l-1.5 2.4-1.2-3.2c-2 .9-4 1.2-6 .6l-1 2.6-1.4-3c-2.6.2-4.8 1.6-6.4 4.3-.6-1.3-1-1.4-1.5 1.7z" fill="#262033"/>
+    <ellipse cx="24.8" cy="34.2" rx="2.4" ry="1.3" fill="#ec8f9a" opacity=".55"/><ellipse cx="39.2" cy="34.2" rx="2.4" ry="1.3" fill="#ec8f9a" opacity=".55"/>
+    <path d="M25.6 30.4h5M33.4 30.4h5" stroke="#3a2b22" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M26.6 30.6a1.9 1.6 0 0 0 3.6 0zM34.4 30.6a1.9 1.6 0 0 0 3.6 0z" fill="#2a1f1a"/>
+    <path d="M30.4 36.6h3.2" stroke="#9c5f4c" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M24.5 21l1-6.5 3.6 3.2L32 12.4l2.9 5.3 3.6-3.2 1 6.5z" fill="${c}"/>
+    <path d="M24.5 21h15" stroke="${EMBLEM_INK}" stroke-width=".9" opacity=".45"/>
+    <circle cx="25.5" cy="14.3" r="1.1" fill="#fff"/><circle cx="32" cy="12.2" r="1.2" fill="#fff"/><circle cx="38.5" cy="14.3" r="1.1" fill="#fff"/>
+    <path d="M32 16.6l1.5 1.9-1.5 1.9-1.5-1.9z" fill="#d9344a"/>`,
 ];
 
 const hexPts = (r, cx = 32, cy = 32) =>
@@ -108,6 +121,7 @@ function emblemSvg(i, cls = 'emb') {
   const c = RANKS[i].color, id = `emb${i}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" class="${cls}" viewBox="-6 -6 76 76" role="img" aria-label="${RANKS[i].name}"><title>${RANKS[i].name}</title>
     <defs>
+      <clipPath id="${id}c"><polygon points="${hexPts(25.5)}"/></clipPath>
       <radialGradient id="${id}b" cx="50%" cy="38%" r="65%"><stop offset="0" stop-color="${c}" stop-opacity=".38"/><stop offset=".7" stop-color="#121a2c"/><stop offset="1" stop-color="#090d16"/></radialGradient>
       <radialGradient id="${id}g"><stop offset=".55" stop-color="${c}" stop-opacity=".45"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>
     </defs>
