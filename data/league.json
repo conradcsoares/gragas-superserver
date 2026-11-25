@@ -2,7 +2,8 @@
   "version": 2,
   "settings": {
     "leagueName": "Gragas Superserver",
-    "region": "na"
+    "region": "na",
+    "crownImg": "assets/crown-mwwlcevp.webp"
   },
   "games": [
     {
