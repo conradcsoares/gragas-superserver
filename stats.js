@@ -240,7 +240,7 @@ function viewPlayer(k) {
       <div style="min-width:0">
         <div class="lbl">Player</div>
         <h1 class="ph-name">${esc(name)}<span class="ph-tag">#${esc(tag)}</span>${p.nick ? `<span class="ph-nick">(${esc(p.nick)})</span>` : ''}</h1>
-        <div class="small muted"><a href="${opgg(p.id, S.data.settings.region)}" target="_blank" rel="noopener noreferrer">op.gg ↗</a>${p.alts.length ? ` · alt: ${p.alts.map(a => esc(a)).join(', ')}` : ''}</div>
+        <div class="small muted">${soloBadge(p, true)} <a href="${opgg(p.id, S.data.settings.region)}" target="_blank" rel="noopener noreferrer">op.gg ↗</a>${p.alts.length ? ` · alt: ${p.alts.map(a => esc(a)).join(', ')}` : ''}</div>
       </div>
       <div class="ph-rating"><div class="lbl">Rating</div><div class="ph-big num">${p.rating}</div></div>
     </div>
@@ -252,8 +252,8 @@ function viewPlayer(k) {
     </div>
     <div class="ph-grid">
       ${tile('Rank', `#${place + 1}`, `of ${ladder.length}`)}
-      ${tile('Win rate', `${pct(p.wins, games)}%`)}
-      ${tile('Record', `${p.wins}–${p.losses}`, `${games} game${games === 1 ? '' : 's'}`)}
+      ${(() => { const b = S.blend?.players[k]; return b && b.estimate != null ? tile('Balance', `<span title="Adjusted: what ⚖ Balance uses in Adjusted mode">${b.balance}</span>`, `<span title="Adjusted = ${Math.round(b.weight * 100)}% this ladder rating + ${100 - Math.round(b.weight * 100)}% what their Solo/Duo rank (≈ ${b.estimate} here) predicts. Normal mode uses the ladder rating, ${b.ladder}.">Adjusted · Normal ${b.ladder}</span>`) : ''; })()}
+      ${tile('Record', `${p.wins}–${p.losses}`, `${pct(p.wins, games)}% · ${games} game${games === 1 ? '' : 's'}`)}
       ${tile('Streak', `<span class="${lastE.won ? 'pos' : 'neg'}">${lastE.won ? 'W' : 'L'}${streak}</span>`)}
       ${tile('Peak', peak)}
       ${tile('★ MVP', mvps)}
@@ -264,6 +264,7 @@ function viewPlayer(k) {
       </div>
     </div>
   </div>
+  ${rolesCard(k)}
   <div class="card"><h3 class="ctitle">Rating history</h3>
     <div class="rchart" data-mode="player" data-k="${esc(k)}" data-h="400"></div></div>
   <div class="card"><h3 class="ctitle">Games <span class="muted">· ${games}</span></h3>

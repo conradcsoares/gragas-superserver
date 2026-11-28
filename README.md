@@ -1,8 +1,10 @@
 # Gragas Superserver
 
+> How it works under the hood (for contributors and agents): [CLAUDE.md](CLAUDE.md) and [docs/](docs/).
+
 A simple Elo ladder for our 5v5 League of Legends custom games. It's a static site (plain HTML/CSS/JS, no build step) that runs free on GitHub Pages.
 
-- One page: the ladder, a **+ Record game** button and the last few games.
+- Three tabs: **Rankings**, **Rating history** and **Games**, plus a page for every player. Admins also get **+ Record game**.
 - **Screenshot import:** in the record form, tap **📷 From screenshots** and pick the post-game Scoreboard screenshots (a whole Bo3 at once), or paste one. The site reads the names, the winner and the date in your browser and fills the form for you to check. Names are matched to known players; new players just need their `#TAG` once.
 - **Nicknames:** as the admin, open **Nicknames & alt accounts** under the ladder to give a player a real name. Everywhere on the site, players show as their Riot ID with the name after it, e.g. `ArsDerps#NA1 (Arjun)`. The trailer shows just the nickname.
 - **Tabs:** **Rankings** (podium + ladder), **Rating history** and **Games**, each with its own link (`#rankings`, `#history`, `#games`).
@@ -14,7 +16,11 @@ A simple Elo ladder for our 5v5 League of Legends custom games. It's a static si
 - **#1 picture:** as the admin, open **Nicknames & alt accounts** and use **Upload picture…** to put any image inside the #1 emblem. It's cropped to fit the frame and saved in `assets/`; **Use the drawn one** switches back.
 - **Alt accounts:** as the admin, tap **Link alt accounts** under the ladder to make an alt count toward a main player. Games keep the account that was played, so unlinking is always safe.
 - **Fast recording:** tap players to put them on Team 1 / Team 2, or use **Same teams as last game** / **Rematch**. Tap the winner once per game, so a Bo3 is three taps and one save.
-- Each player is their **Riot ID** (`Name#TAG`), and their name on the ladder links to their op.gg profile.
+- Each player is their **Riot ID** (`Name#TAG`); their name opens their player page, which links to op.gg.
+- **Solo/Duo ranks:** each player's real rank shows as a badge (e.g. **D1**). Ranks are pulled by hand now and then (`RIOT_API_KEY=… node tools/fetch-ranks.mjs`) and only nudge team balancing; the ladder itself is built from customs alone.
+- **Adjusted / Normal:** next to ⚖ Balance. **Adjusted** (default) balances on ladder ratings nudged by Solo/Duo rank, most for players with few games; **Normal** uses ladder ratings only. The ladder always shows real results.
+- **Personal links:** an admin hands each player a link (`…#me=<code>`) from **Player links** under the ladder. Opening it logs that device in as them, with no account or password; the header shows who you are. Admin links can also record games. A leaked link can be reissued, which kills the old one.
+- **Roles:** logged in, a player taps their favourite roles in order on their own page (any 1–5). Everyone's order is public. ⚖ Balance keeps teams fair first, then prefers the fairest splits where more people get their favourite roles, and fills in everyone's role. Each player in a team box has a role picker, like a League lobby: switch roles around freely; two players on one role or a missing role is flagged, not blocked. **Auto roles** refills them from preferences.
 - Anyone who plays a recorded game joins the ladder automatically, starting at **1000**.
 - Every 100 points is a rank: **Make-A-Wish Kid** (<350) · **Wood** 350+ · **Moron** 450+ · **Tool** 550+ · **Pawn** 650+ · **Peasant** 750+ · **NPC** 850+ · **The Observer** 950+ (start) · **Manipulator** 1050+ · **Lone Wolf** 1150+ · **Puppet Master** 1250+ · **Mastermind** 1350+ · **Dark Triad** 1450+. **Ayanokoji** isn't a rating band: it's the title held by whoever is #1 on the ladder. Each rank has its own emblem (`emblems.js`); the frame gets fancier as you climb.
 - **Trailer:** `trailer.html` is a 25-second hype trailer with sound, built from the live ladder (top 3, ranks, who holds the crown). **⬇ Save as video** records it to an MP4/WebM you can post in Discord.
@@ -51,7 +57,7 @@ Open pages update by themselves when someone publishes, without reloading:
 
 ### Saving games
 
-Games are stored in `data/league.json` in the repo. Visitors see a read-only ladder. To edit, open `https://conradcsoares.github.io/gragas-superserver/#admin` once on your device. That unlocks **+ Record game** there. The first time you press **Publish**, the site asks for a GitHub key:
+Games are stored in `data/league.json` in the repo. Visitors see a read-only ladder. To edit, open your admin personal link (or, the old way, `https://conradcsoares.github.io/gragas-superserver/#admin`) once on your device. That unlocks **+ Record game** there. The first time you press **Publish**, the site asks for a GitHub key:
 
 1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new). Pick **Only select repositories** → this repo. Under Permissions, click **+ Add permissions** → **Contents**, then set it to **Read and write**.
 2. Paste it into the box and click **Save & publish**. Everyone with the site open sees it within a couple of seconds (see *Live updates*).

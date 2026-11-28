@@ -411,3 +411,73 @@ label.aw select { width: auto; max-width: 140px; padding: 4px 8px; font-size: 13
 .mc.loss .mc-res { color: var(--loss); }
 .pr.me { background: rgba(200, 170, 110, .14); }
 .pr.me .pr-nm { color: var(--gold-hi); font-weight: 700; }
+
+/* Solo/Duo rank badges */
+.solo { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; line-height: 17px; vertical-align: 1px; white-space: nowrap; color: var(--tc); background: color-mix(in srgb, var(--tc) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tc) 35%, transparent); }
+.solo.none { --tc: var(--muted); font-weight: 600; }
+.t-iron { --tc: #8d817c; } .t-bronze { --tc: #c4824f; } .t-silver { --tc: #aebdca; } .t-gold { --tc: #e6b94f; }
+.t-platinum { --tc: #4fc0ad; } .t-emerald { --tc: #3fcf8e; } .t-diamond { --tc: #7d9bff; } .t-master { --tc: #c07cf0; }
+.t-grandmaster { --tc: #ef5a5f; } .t-challenger { --tc: #f4cf5a; }
+.phead .solo { margin-left: 0; }
+.mem .solo { margin-left: 4px; flex-shrink: 0; }
+
+/* ---------- roles on the team screen: a compact picker at the start of each row ---------- */
+.mem .role { position: relative; flex-shrink: 0; margin: 0 -2px 0 -6px; font-size: 11px; font-weight: 700; color: var(--text); cursor: pointer; }
+.mem .role select { appearance: none; -webkit-appearance: none; width: 40px; height: 22px; padding: 0 4px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg); color: inherit; font: inherit; text-align: center; text-align-last: center; cursor: pointer; }
+.mem .role select:focus { outline: none; border-color: var(--gold); }
+.mem .role.none { color: var(--dim); }
+.mem .role.none select { border-style: dashed; }
+.mem .role.p1 select { border-color: rgba(60, 207, 145, .6); color: var(--win); }
+.mem .role.p2 select { border-color: rgba(200, 170, 110, .6); color: var(--gold); }
+.mem .role.off select { color: var(--muted); }
+.mem .role.dup select { border-color: var(--loss); color: var(--loss); }
+.mem .pref { flex-shrink: 0; font-size: 10px; color: var(--dim); font-weight: 600; margin-left: -2px; }
+.mem .nm { flex: 1; }
+.role-warn { color: var(--loss); margin: -2px 0 6px; }
+.bal-opt small { display: block; font-size: 10px; color: var(--muted); font-weight: 500; }
+
+/* Adjusted | Normal switch next to ⚖ Balance */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--panel2); border: 0; color: var(--muted); font-size: 13px; font-weight: 600; padding: 5px 10px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--gold); color: #14110a; }
+
+/* ---------- logged-in player: header chip + menu ---------- */
+.me { position: relative; }
+.me:empty { display: none; }
+.me-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; padding: 4px 10px 4px 6px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel2); font-size: 13px; font-weight: 600; cursor: pointer; }
+.me-chip:hover { border-color: var(--gold); }
+.me-emb { width: 22px; height: 22px; flex-shrink: 0; display: inline-flex; }
+.me-emb svg { width: 100%; height: 100%; }
+.me-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.me-nm .nick { color: var(--muted); font-weight: 500; }
+.adm { flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: .06em; color: #14110a; background: var(--gold); border-radius: 4px; padding: 1px 5px; }
+.me-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 200px; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+.me-menu .small { padding: 2px 8px 6px; overflow-wrap: anywhere; }
+.me-menu a, .me-menu button { display: block; text-align: left; background: none; border: 0; color: var(--text); text-decoration: none; font-size: 14px; font-weight: 600; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.me-menu a:hover, .me-menu button:hover { background: var(--panel2); color: var(--gold-hi); }
+.me-fresh { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-color: var(--gold); }
+
+/* ---------- Player links panel (admins) ---------- */
+.links-list { display: flex; flex-direction: column; }
+.lrow { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; padding: 9px 0; border-top: 1px solid var(--border); }
+.lname { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.lact { gap: 6px; align-items: center; }
+.adm-t { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; color: var(--text); cursor: pointer; }
+.adm-t input { width: auto; margin: 0; }
+.adm-t.off { color: var(--dim); cursor: default; }
+.lurl { flex-basis: 100%; margin: 2px 0 0; font-size: 12px; color: var(--gold-hi); }
+
+/* ---------- role preferences on the player page ---------- */
+.role-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.rp { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel2); font-size: 14px; font-weight: 600; cursor: pointer; }
+.rp:hover { border-color: var(--gold); }
+.rp.on { border-color: var(--gold); color: var(--gold-hi); }
+.rp b { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--gold); color: #14110a; font-size: 11px; }
+@media (max-width: 520px) {
+  .mem .pref { display: none; } /* the picker's colour already shows 1st (green) / 2nd (gold) */
+  .mem .role select { width: 30px; padding: 0 1px; font-size: 10px; }
+  .mem { gap: 4px; }
+  .mem .rm { display: none; } /* tapping the row still removes the player; the ✕ is mostly a hover hint */
+  .me-chip { max-width: 200px; }
+}

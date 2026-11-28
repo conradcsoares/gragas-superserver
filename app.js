@@ -4,7 +4,7 @@
  * doesn't expose custom games), stored in data/league.json and published via the GitHub API.
  * Ratings are recomputed from the full game list on every load. */
 
-const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin', picker: 'cl.picker' };
+const LS = { gh: 'cl.github', draft: 'cl.draft', form: 'cl.form2', admin: 'cl.admin', picker: 'cl.picker', me: 'cl.me', mode: 'cl.balMode' };
 // Only the owner edits. Visiting the site once with #admin unlocks editing on that device;
 // everyone else sees a read-only ladder.
 if (location.hash === '#admin') { try { localStorage.setItem(LS.admin, '1'); } catch { /* ignore */ } history.replaceState(null, '', location.pathname + location.search); }
@@ -26,6 +26,17 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* unavailable */ } },
   del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
 };
+// Personal links: opening …/#me=<code> logs this device in as that player (docs/supabase.md). The code is the only
+// secret, so it moves into localStorage and out of the address bar (and the history) straight away.
+let ME_FRESH = false; // show the one-time "You're logged in as…" banner
+function takeMeHash() {
+  const m = location.hash.match(/^#me=([A-Za-z0-9]{16,64})$/);
+  if (!m) return false;
+  store.set(LS.me, { code: m[1] }); ME_FRESH = true;
+  history.replaceState(null, '', location.pathname + location.search);
+  return true;
+}
+takeMeHash();
 
 // Riot IDs: "Game Name#TAG". Case-insensitive identity, original casing for display.
 function parseRiotId(s) {
@@ -38,7 +49,12 @@ const opgg = (id, region) => {
 };
 
 // ---------- state ----------
-const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false, page: null };
+const S = { showLinks: false, importing: null, data: null, base: null, baseData: null, loadedAt: 0, dirty: false, remoteChanged: false, stats: null, form: (f => (f && Array.isArray(f.results) ? f : null))(store.get(LS.form)), askKey: false, showAll: false, busy: false, page: null,
+  // me: who this device is logged in as ({ code, player, admin }; player is unknown until whoami answers).
+  me: (m => (m && m.code ? m : null))(store.get(LS.me)), meMenu: false,
+  // Team balancing: 'adjusted' (ladder rating nudged by Solo/Duo rank) or 'normal' (ladder rating only).
+  mode: store.get(LS.mode) === 'normal' ? 'normal' : 'adjusted',
+  roleRows: [], roles: {}, roleDraft: null, meLinks: null, showMeLinks: false, linkShown: null };
 store.del(LS.picker); // the old separate Balance screen's saved state
 
 
@@ -189,6 +205,10 @@ function rebase(remoteJson) {
 const saveDraft = () => store.set(LS.draft, { data: S.data, base: S.base, baseData: S.baseData });
 function update() {
   S.stats = compute(S.data);
+  S.blend = blendRatings(S.stats, S.ranks); // ladder ratings blended with Solo/Duo ranks, for team balancing only
+  // Role preferences by player key. Stored under the account the link belongs to; alts share their main's.
+  S.roles = {};
+  for (const r of S.roleRows) S.roles[keyOf(resolveId(r.player))] = r.roles;
   const crown = S.data.settings.crownImg || null;
   if (crown !== S.crownShown && crown !== S.crownTried) {
     S.crownTried = crown;
@@ -237,7 +257,7 @@ function renderBanner() {
     <button class="btn sm" data-act="discard">Discard</button>
     <button class="btn sm gold" data-act="publish" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Publishing…' : 'Publish'}</button></div>`;
 }
-const canEdit = () => store.get(LS.admin) === 1 || !!ghCfg().token;
+const canEdit = () => store.get(LS.admin) === 1 || !!ghCfg().token || !!(S.me && S.me.admin);
 // Player pages live at #p/<Riot ID>, so they can be linked and the back button works.
 // Tabs live at #rankings (default), #history and #games, so each can be linked and the back button works.
 const TABS = [['rankings', 'Rankings'], ['history', 'Rating history'], ['games', 'Games']];
@@ -249,7 +269,10 @@ function route() {
   if (!id) S.tab = TABS.some(([k]) => k === t) ? t : 'rankings';
 }
 route();
-window.addEventListener('hashchange', () => { route(); if (S.data) { render(); window.scrollTo(0, 0); } });
+window.addEventListener('hashchange', () => {
+  if (takeMeHash()) { S.me = store.get(LS.me); checkMe(); return; }
+  route(); if (S.data) { render(); window.scrollTo(0, 0); }
+});
 function render() {
   const st = S.data.settings;
   $('#recordBtn').hidden = !canEdit();
@@ -257,8 +280,9 @@ function render() {
   $('#leagueName').textContent = LEAGUE_NAME;
   document.title = LEAGUE_NAME;
   renderBanner();
-  const tab = { rankings: () => viewLadder() + (S.showLinks && canEdit() ? viewLinks() : ''), history: viewHistory, games: viewGames }[S.tab] || viewLadder;
-  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + (S.page ? viewPlayer(keyOf(resolveId(S.page)))
+  renderMe();
+  const tab = { rankings: () => viewLadder() + (S.showMeLinks && S.me?.admin ? viewMeLinks() : '') + (S.showLinks && canEdit() ? viewLinks() : ''), history: viewHistory, games: viewGames }[S.tab] || viewLadder;
+  $('#view').innerHTML = (S.askKey ? viewKeyBox() : '') + viewMeFresh() + (S.page ? viewPlayer(keyOf(resolveId(S.page)))
     : (S.form ? viewForm() : '') + viewTabs() + tab());
   drawCharts();
 }
@@ -278,15 +302,27 @@ function viewLadder() {
       <td class="rk">${i + 1}</td>
       <td class="em">${emblemSvg(rankOf(p.rating, i))}</td>
       <td class="pl"><a href="${playerHref(p.id)}" title="${esc(p.id)}: stats and rating history">${fullNameHtml(p.id)}</a>
-        <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>
+        <span class="rank" style="--c:${RANKS[rankOf(p.rating, i)].color}">${RANKS[rankOf(p.rating, i)].name}</span>${soloBadge(p)}
         ${p.alts.length ? `<div class="alts">alt: ${p.alts.map(a => esc(a)).join(', ')}</div>` : ''}</td>
       <td class="r num muted">${p.wins}–${p.losses}</td>
       <td class="r num"><span class="rating">${p.rating}</span>${lastHtml(p)}</td>
     </tr>`; }).join('')}</tbody></table>` : ''}
     <div class="legend">${RANKS.map((r, i) => `<span class="lg" style="color:${r.color}">${emblemSvg(i)}<span>${r.name}<small>${rankRange(i)}</small></span></span>`).reverse().join('')}</div>
-    ${canEdit() && !S.showLinks ? '<div class="row end" style="margin-top:10px"><button class="link" data-act="show-links">Nicknames &amp; alt accounts</button></div>' : ''}</div>`;
+    ${(canEdit() && !S.showLinks) || (S.me?.admin && !S.showMeLinks) ? `<div class="row end" style="margin-top:10px;gap:16px">
+      ${S.me?.admin && !S.showMeLinks ? '<button class="link" data-act="show-me-links">Player links</button>' : ''}
+      ${canEdit() && !S.showLinks ? '<button class="link" data-act="show-links">Nicknames &amp; alt accounts</button>' : ''}</div>` : ''}</div>`;
 }
 
+// Solo/Duo rank badge: short (G1, P3, E4, D1, M 20) or long (Gold I · 95 LP). p: a player ({ id, alts }).
+const SOLO_SHORT = { IRON: 'I', BRONZE: 'B', SILVER: 'S', GOLD: 'G', PLATINUM: 'P', EMERALD: 'E', DIAMOND: 'D', MASTER: 'M', GRANDMASTER: 'GM', CHALLENGER: 'C' };
+const tierName = t => t.charAt(0) + t.slice(1).toLowerCase();
+const soloText = r => `${tierName(r.tier)}${SOLO_TIERS.includes(r.tier) ? ` ${r.division}` : ''} · ${r.lp} LP`;
+function soloBadge(p, long = false) {
+  const r = S.ranks && soloFor(p, S.ranks);
+  if (!r) return long && S.ranks ? '<span class="solo none">Unranked</span>' : '';
+  const short = SOLO_SHORT[r.tier] + (SOLO_TIERS.includes(r.tier) ? { IV: 4, III: 3, II: 2, I: 1 }[r.division] : ` ${r.lp}`);
+  return `<span class="solo t-${r.tier.toLowerCase()}" title="Solo/Duo: ${esc(soloText(r))}${r.wins != null ? ` (${r.wins}–${r.losses})` : ''}">${long ? esc(soloText(r)) : short}</span>`;
+}
 const lastHtml = p => (p.last ? `<span class="d ${p.last > 0 ? 'pos' : 'neg'}" title="Rating change from their last game">${signed(p.last)}</span>` : '');
 // Top 3 on steps: 2nd on the left, 1st in the middle (tallest), 3rd on the right.
 function viewPodium(ladder, region) {
@@ -370,7 +406,9 @@ function emptyForm(teams) {
 }
 function saveFormState() {
   const f = S.form;
-  if (f && f.locks) for (const k of Object.keys(f.locks)) if (![...f.blue, ...f.red].some(x => keyOf(resolveId(x)) === k)) delete f.locks[k];
+  const inTeams = k => [...f.blue, ...f.red].some(x => keyOf(resolveId(x)) === k);
+  if (f && f.locks) for (const k of Object.keys(f.locks)) if (!inTeams(k)) delete f.locks[k];
+  if (f && f.roles) for (const k of Object.keys(f.roles)) if (!inTeams(k)) delete f.roles[k];
   store.set(LS.form, f);
 }
 const awardOf = (f, i) => ((f.awards || (f.awards = []))[i] || (f.awards[i] = { mvp: '', ace: '' }));
@@ -401,6 +439,15 @@ function gamesByIds(ids) { return S.stats.ordered.filter(g => ids.includes(g.id)
 // ----- autobalance: part of the same team screen. Anyone can use it (visitors get the screen without the
 // recording parts); nothing is saved to the ladder until an admin records a game. Algorithm in core.js.
 const ratingOf = id => S.stats.P[keyOf(resolveId(id))]?.rating ?? START;
+// What the team balancer uses. Normal: the ladder rating. Adjusted: the blended rating (see blendRatings in core.js);
+// someone not on the ladder yet counts as what their Solo/Duo rank predicts, or 1000 if unranked.
+function balRatingOf(id, mode = S.mode) {
+  if (mode === 'normal') return ratingOf(id);
+  const k = keyOf(resolveId(id)), b = S.blend?.players[k];
+  if (b) return b.balance;
+  const sc = soloScore(S.ranks?.[k]);
+  return sc == null || !S.blend ? START : Math.round(S.blend.a + S.blend.b * sc);
+}
 const sameP = (a, b) => keyOf(resolveId(a)) === keyOf(resolveId(b));
 const avgRating = ids => ids.reduce((s, id) => s + ratingOf(id), 0) / ids.length;
 const byName = (a, b) => fullName(a).localeCompare(fullName(b), undefined, { sensitivity: 'base' });
@@ -423,14 +470,30 @@ const lockOf = (f, id) => (f.locks || {})[keyOf(resolveId(id))] || null;
 // rolled when Balance is tapped. With locks, the locks decide which team is which.
 function balOptions(f) {
   const ids = [...f.blue, ...f.red].sort(byName);
-  const players = ids.map(id => ({ id, rating: ratingOf(id), side: lockOf(f, id) }));
+  const players = ids.map(id => ({ id, rating: balRatingOf(id), side: lockOf(f, id), prefs: prefsOf(id) }));
   const flip = !players.some(p => p.side);
-  return balanceTeams(players).map((o, i) => (flip && f.bal.flips[i] ? { ...o, blue: o.red, red: o.blue, p: 1 - o.p } : o));
+  return balanceTeams(players).map((o, i) => (flip && f.bal.flips[i] ? { ...o, blue: o.red, red: o.blue, p: 1 - o.p, cost: o.cost && { blue: o.cost.red, red: o.cost.blue } } : o));
+}
+// Keep the teams on screen if they're still one of the options (after a lock or mode change), else take option 1.
+function refreshBal() {
+  const f = S.form;
+  if (!balOn(f)) return false;
+  const cur = balOptions(f).findIndex(o => teamKey(o.blue) === teamKey(f.blue));
+  if (cur < 0) { useOption(0); return true; }
+  f.bal.opt = cur;
+  return false;
+}
+function setMode(mode) {
+  S.mode = mode === 'normal' ? 'normal' : 'adjusted'; store.set(LS.mode, S.mode);
+  if (S.form && refreshBal()) return;
+  if (S.form) saveFormState();
+  render();
 }
 function useOption(i) {
   const f = S.form, o = balOptions(f)[i];
   if (!o) return;
   Object.assign(f, { blue: [...o.blue], red: [...o.red], active: 'blue' });
+  if (o.roles) f.roles = Object.fromEntries(Object.entries(o.roles).map(([id, r]) => [keyOf(resolveId(id)), r]));
   f.bal.opt = i; f.bal.key = groupKey(f);
   saveFormState(); render();
 }
@@ -446,11 +509,35 @@ function setLock(id, side) {
   const f = S.form, locks = f.locks || (f.locks = {}), k = keyOf(resolveId(id));
   if (side && [...f.blue, ...f.red].filter(x => !sameP(x, id) && lockOf(f, x) === side).length >= 5) return toast(`${TEAM[side]} already has 5 locked players.`, true);
   if (side) locks[k] = side; else delete locks[k];
-  if (balOn(f)) {
-    const opts = balOptions(f), cur = opts.findIndex(o => teamKey(o.blue) === teamKey(f.blue));
-    if (cur >= 0) f.bal.opt = cur; else return useOption(0);
+  if (refreshBal()) return;
+  saveFormState(); render();
+}
+
+// ----- roles on the team screen: like a League lobby, everyone has a position, and people can switch them around.
+// Two players on the same role or a role nobody plays is allowed (it's flagged, not blocked).
+const prefsOf = id => S.roles[keyOf(resolveId(id))] || null;
+const roleOf = (f, id) => (f.roles || {})[keyOf(resolveId(id))] || '';
+const ROLE_SHORT = { TOP: 'Top', JUNGLE: 'Jg', MID: 'Mid', ADC: 'ADC', SUPPORT: 'Sup' };
+const ordinal = i => ['1st', '2nd', '3rd', '4th', '5th'][i];
+function setRole(id, role) {
+  const f = S.form, r = f.roles || (f.roles = {});
+  if (ROLES.includes(role)) r[keyOf(resolveId(id))] = role; else delete r[keyOf(resolveId(id))];
+  saveFormState(); render();
+}
+// Fill both teams' roles from preferences (the cheapest assignment, as the balancer does).
+function autoRoles() {
+  const f = S.form, r = f.roles || (f.roles = {});
+  for (const side of ['blue', 'red']) {
+    if (f[side].length !== 5) continue;
+    bestRoles(f[side].map(prefsOf)).roles.forEach((role, i) => { r[keyOf(resolveId(f[side][i]))] = role; });
   }
   saveFormState(); render();
+}
+// How happy a team is with its roles: how many play a top-2 pick, among those with preferences.
+function roleSummary(ids, roles) {
+  const withPrefs = ids.filter(id => prefsOf(id));
+  const top2 = withPrefs.filter(id => { const i = prefsOf(id).indexOf(roles(id)); return i >= 0 && i < 2; }).length;
+  return { n: withPrefs.length, top2 };
 }
 
 function viewForm() {
@@ -468,22 +555,38 @@ function viewForm() {
   const nLocked = [...f.blue, ...f.red].filter(x => lockOf(f, x)).length;
   const member = (side, id) => {
     const lk = showLocks && lockOf(f, id);
+    const role = roleOf(f, id), prefs = prefsOf(id), pi = prefs && role ? prefs.indexOf(role) : -1;
+    const dup = role && f[side].filter(x => roleOf(f, x) === role).length > 1;
+    const roleTip = role ? `${ROLE_NAME[role]}${prefs ? (pi >= 0 ? ` · ${ordinal(pi)} choice` : ' · not one of their picks') : ''}${dup ? ' · two players on this role' : ''}` : 'No role yet';
+    const adj = balRatingOf(id, 'adjusted'), lad = ratingOf(id);
     return `<div class="mem ${lk ? 'locked' : ''}" role="button" tabindex="0" data-act="unpick" data-side="${side}" data-id="${esc(id)}" title="Remove">
-        <span class="nm">${esc(fullName(id))}</span><span class="rt num">${Math.round(ratingOf(id))}</span>
+        <label class="role ${role ? '' : 'none'} ${dup ? 'dup' : ''} ${pi === 0 ? 'p1' : pi === 1 ? 'p2' : pi > 1 ? 'pn' : prefs && role ? 'off' : ''}" data-act="noop" title="${esc(roleTip)}">
+          <select data-role="${esc(id)}" aria-label="${esc(fullName(id))}'s role">${['', ...ROLES].map(r => `<option value="${r}" ${r === role ? 'selected' : ''}>${r ? ROLE_SHORT[r] : '—'}</option>`).join('')}</select></label>
+        <span class="nm">${esc(fullName(id))}</span>${pi >= 0 ? `<span class="pref" title="${esc(roleTip)}">${ordinal(pi)}</span>` : ''}${soloBadge(who(id))}<span class="rt num" title="Ladder ${Math.round(lad)} · Adjusted ${adj}${S.mode === 'adjusted' ? ' (blends in Solo/Duo rank; used for ⚖ Balance)' : ' · Normal mode balances on the ladder rating'}">${Math.round(balRatingOf(id))}</span>
         ${lk && bal ? `<button class="lk" data-act="lock" data-id="${esc(id)}" data-side="${other(side)}" title="Move to ${TEAM[other(side)]} (stays locked)" aria-label="Move to ${TEAM[other(side)]}">⇄</button>` : ''}
         ${showLocks ? `<button class="lk ${lk ? 'on' : ''}" data-act="lock" data-id="${esc(id)}" data-side="${lk ? '' : side}" title="${lk ? 'Unlock' : `Lock to ${TEAM[side]} for ⚖ Balance`}" aria-label="${lk ? 'Unlock' : `Lock to ${TEAM[side]}`}">${lk ? '🔒' : '🔓'}</button>` : ''}
         <span class="rm">✕</span></div>`;
   };
-  const team = side => `<div class="tbox ${side} ${f.active === side ? 'active' : ''}" data-act="set-active" data-side="${side}">
-      <div class="tbox-head"><h3>${TEAM[side]}</h3><span class="small muted num">${f[side].length ? `avg ${Math.round(avgRating(f[side]))} · ` : ''}${f[side].length}/5</span></div>
+  // Rows read Top → Support like a lobby; players without a role go last. (Display order only.)
+  const roleRank = id => { const r = roleOf(f, id); return r ? ROLES.indexOf(r) : ROLES.length; };
+  const avgUse = ids => ids.reduce((t, id) => t + balRatingOf(id), 0) / ids.length;
+  const team = side => {
+    const ids = [...f[side]].sort((a, b) => roleRank(a) - roleRank(b));
+    const anyRole = ids.some(id => roleOf(f, id));
+    const missing = anyRole && ids.length === 5 ? ROLES.filter(r => !ids.some(id => roleOf(f, id) === r)) : [];
+    return `<div class="tbox ${side} ${f.active === side ? 'active' : ''}" data-act="set-active" data-side="${side}">
+      <div class="tbox-head"><h3>${TEAM[side]}</h3><span class="small muted num" ${f[side].length ? `title="Average ${S.mode === 'adjusted' ? 'adjusted' : 'ladder'} rating (ladder: ${Math.round(avgRating(f[side]))})"` : ''}>${f[side].length ? `avg ${Math.round(avgUse(f[side]))} · ` : ''}${f[side].length}/5</span></div>
       ${sw ? swingHtml(sw, side) : ''}
-      ${f[side].map(id => member(side, id)).join('')}
+      ${missing.length ? `<div class="small role-warn">No ${missing.map(r => ROLE_NAME[r]).join(', ')}</div>` : ''}
+      ${ids.map(id => member(side, id)).join('')}
       ${Array(Math.max(0, 5 - f[side].length)).fill('<div class="mem empty"></div>').join('')}</div>`;
+  };
   const bw = f.results.filter(r => r === 'blue').length, rw = f.results.length - bw;
   const n = f.results.length;
   const hint = S.importing ? `⏳ ${S.importing}`
     : (admin ? 'Pick the post-game Scoreboard screenshots (a whole Bo3 at once works), or paste one with Ctrl/⌘+V. ' : '')
-      + (canBalance(f) ? 'Tap ⚖ Balance for fair teams. 🔓 locks a player to their team first.' : 'Pick all 10 players to balance the teams.');
+      + (canBalance(f) ? 'Tap ⚖ Balance for fair teams. 🔓 locks a player to their team first.' : 'Pick all 10 players to balance the teams.')
+      + ' Roles can be changed on each player; doubles and gaps are fine.';
   return `<div class="card form" id="teamForm">
     <div class="row" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">${!admin ? 'Balance teams' : f.editIds.length ? 'Edit' : 'Record games'}</h2>
       ${admin ? `<input type="date" data-f="date" value="${esc(f.date)}" style="width:auto;margin:0">` : ''}</div>
@@ -491,12 +594,19 @@ function viewForm() {
       ${admin ? `<button class="btn sm" data-act="shots" ${S.importing ? 'disabled' : ''}>📷 From screenshots</button>` : ''}
       ${last ? '<button class="btn sm" data-act="last-teams">↺ Same teams as last game</button>' : ''}
       ${f.blue.length || f.red.length ? '<button class="btn sm" data-act="swap">⇄ Swap</button><button class="btn sm" data-act="clear-teams">Clear</button>' : ''}
-      ${canBalance(f) ? '<button class="btn sm gold" data-act="balance">⚖ Balance</button>' : ''}</div>
+      ${canBalance(f) ? '<button class="btn sm gold" data-act="balance">⚖ Balance</button>' : ''}
+      ${canBalance(f) && S.ranks ? `<span class="seg" role="group" aria-label="Ratings ⚖ Balance uses">${[['adjusted', 'Adjusted', 'Ladder ratings nudged by Solo/Duo rank (most for players with few games)'], ['normal', 'Normal', 'Ladder ratings only']].map(([m, label, tip]) =>
+        `<button class="${S.mode === m ? 'on' : ''}" data-act="bal-mode" data-mode="${m}" aria-pressed="${S.mode === m}" title="${tip}">${label}</button>`).join('')}</span>` : ''}
+      ${[...f.blue, ...f.red].some(prefsOf) && (f.blue.length === 5 || f.red.length === 5) ? '<button class="btn sm" data-act="auto-roles" title="Give everyone the role they like most, team by team">Auto roles</button>' : ''}</div>
       <p class="hint" style="margin:0 0 12px">${hint}</p>` : ''}
     ${bal && opts.length ? `<div class="bal">
       <div class="bal-opts">${opts.map((x, i) => `<button class="bal-opt ${i === f.bal.opt ? 'on' : ''}" data-act="bal-opt" data-i="${i}">
-        <b>Option ${i + 1}</b><span class="num"><span class="blue-t">${pct(x.p)}</span>–<span class="red-t">${100 - pct(x.p)}</span></span></button>`).join('')}</div>
-      <div class="row" style="justify-content:space-between"><span class="small muted">Each option gives both teams an even mix of strong and weak players, then gets as close to 50/50 as it can.${nLocked && opts.length < 5 ? ` Only ${opts.length} distinct option${opts.length > 1 ? 's' : ''} with these locks.` : ''}</span>
+        <b>Option ${i + 1}</b><span class="num"><span class="blue-t">${pct(x.p)}</span>–<span class="red-t">${100 - pct(x.p)}</span></span>${(() => {
+          if (!x.roles) return '';
+          const rs = roleSummary([...x.blue, ...x.red], id => x.roles[id]);
+          return rs.n ? `<small class="num" title="${rs.top2} of ${rs.n} players with role preferences get one of their top 2">${rs.top2}/${rs.n} top-2</small>` : '';
+        })()}</button>`).join('')}</div>
+      <div class="row" style="justify-content:space-between"><span class="small muted">Each option gives both teams an even mix of strong and weak players, then gets as close to 50/50 as it can${opts.some(o => o.roles) ? '. Among the fairest, the ones where more people get their favourite roles come first' : ''}.${nLocked && opts.length < 5 ? ` Only ${opts.length} distinct option${opts.length > 1 ? 's' : ''} with these locks.` : ''}</span>
         ${nLocked ? `<button class="link small" data-act="unlock-all">Unlock all (${nLocked})</button>` : ''}</div>
     </div>` : ''}
     <div class="tboxes">${team('blue')}${team('red')}</div>
@@ -946,9 +1056,146 @@ function viewKeyBox() {
   </div>`;
 }
 
+// ---------- personal links, roles (Supabase; see docs/supabase.md) ----------
+// Every call goes through a function that checks the caller's code; the tables can't be touched directly.
+let sbClient = null;
+function sb() {
+  if (!LIVE.url || !LIVE.key) return Promise.reject(new Error('Supabase is not set up'));
+  return sbClient || (sbClient = new Promise((ok, fail) => {
+    if (window.supabase) return ok();
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+    sc.onload = ok; sc.onerror = () => fail(new Error('could not reach Supabase')); document.head.appendChild(sc);
+  }).then(() => window.supabase.createClient(LIVE.url, LIVE.key)).catch(e => { sbClient = null; throw e; }));
+}
+async function rpc(fn, args) {
+  const { data, error } = await (await sb()).rpc(fn, args);
+  if (error) { const e = new Error(error.message); e.code = error.code; throw e; }
+  return data;
+}
+const meLink = code => `${location.origin}${location.pathname}#me=${code}`;
+// Who this device's link belongs to. Checked once per visit; a revoked link logs out.
+async function checkMe() {
+  const m = store.get(LS.me);
+  if (!m || !m.code) return;
+  try {
+    const r = (await rpc('whoami', { p_code: m.code }))?.[0];
+    if (!r) throw Object.assign(new Error('no such link'), { code: 'P0001' });
+    S.me = { code: m.code, player: r.player, admin: !!r.is_admin }; store.set(LS.me, S.me);
+  } catch (e) {
+    // P0001 = the database said no (unknown or revoked code). Anything else (offline…): keep the saved login.
+    if (e.code === 'P0001') { logout(true); toast('This link no longer works — ask an admin for a new one.', true); }
+  }
+  if (S.data) render();
+}
+function logout(quiet) {
+  store.del(LS.me);
+  Object.assign(S, { me: null, meMenu: false, showMeLinks: false, meLinks: null, roleDraft: null });
+  ME_FRESH = false;
+  if (!quiet) toast('Logged out on this device.');
+  if (S.data) render();
+}
+// Header chip: always shows who this device is logged in as.
+function renderMe() {
+  const el = $('#me'), m = S.me;
+  if (!el) return;
+  if (!m || !m.player) { el.innerHTML = ''; return; }
+  const k = keyOf(resolveId(m.player)), p = S.stats.P[k], place = p ? S.stats.ladder.indexOf(p) : -1;
+  el.innerHTML = `<button class="me-chip" data-act="me-menu" aria-haspopup="menu" aria-expanded="${S.meMenu}" title="Logged in as ${esc(fullName(m.player))}">
+      ${p ? `<span class="me-emb">${emblemSvg(rankOf(p.rating, place))}</span>` : ''}<span class="me-nm">${fullNameHtml(m.player)}</span>${m.admin ? '<span class="adm">ADMIN</span>' : ''}</button>
+    ${S.meMenu ? `<div class="me-menu" role="menu">
+      <div class="small muted">Logged in as ${esc(fullName(m.player))}</div>
+      <a role="menuitem" href="${playerHref(m.player)}" data-act="me-page">My page</a>
+      <a role="menuitem" href="${playerHref(m.player)}" data-act="me-roles">My roles</a>
+      <button role="menuitem" data-act="logout">Log out</button></div>` : ''}`;
+}
+function viewMeFresh() {
+  if (!ME_FRESH || !S.me || !S.me.player) return '';
+  return `<div class="card me-fresh"><span>You're logged in as <b>${fullNameHtml(S.me.player)}</b>${S.me.admin ? ' <span class="adm">ADMIN</span>' : ''}. Not you?</span>
+    <span class="row"><button class="btn sm" data-act="logout">Log out</button><button class="btn sm gold" data-act="me-ok">Got it</button></span></div>`;
+}
+
+// ----- Links panel (admins): one row per ladder player -----
+async function loadMeLinks() {
+  try {
+    const rows = await rpc('list_links', { p_code: S.me.code });
+    S.meLinks = {}; for (const r of rows || []) S.meLinks[keyOf(resolveId(r.player))] = { player: r.player, admin: r.is_admin };
+  } catch (e) { S.meLinks = { error: e.message }; }
+  render();
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+// Copy (creates the link on first use) or reissue (old link dies) a player's link, then copy it.
+async function linkAction(kind, id) {
+  const name = fullName(id);
+  if (kind === 'reissue' && !confirm(`Make a new link for ${name}?\n\nTheir current link stops working straight away.`)) return;
+  try {
+    const code = await rpc(kind === 'reissue' ? 'reissue_link' : 'get_link', { p_code: S.me.code, p_player: id });
+    const url = meLink(code), copied = await copyText(url);
+    S.linkShown = { k: keyOf(id), url };
+    toast(copied ? `Copied ${name}'s link. Send it only to them.` : `Here's ${name}'s link — copy it from the box.`, !copied);
+    await loadMeLinks();
+  } catch (e) { toast(`Couldn't get the link — ${e.message}`, true); }
+}
+async function adminToggle(id, on) {
+  try { await rpc('set_admin', { p_code: S.me.code, p_player: id, p_admin: on }); toast(on ? `${fullName(id)} is now an admin.` : `${fullName(id)} is no longer an admin.`); await loadMeLinks(); }
+  catch (e) { toast(`Couldn't change that — ${e.message}`, true); }
+}
+function viewMeLinks() {
+  const L = S.meLinks, myKey = keyOf(resolveId(S.me.player));
+  const players = [...S.stats.ladder].sort((a, b) => byName(a.id, b.id));
+  const body = !L ? '<p class="muted small">Loading…</p>' : L.error ? `<p class="small neg">Couldn't load links — ${esc(L.error)}</p>`
+    : `<div class="links-list">${players.map(p => {
+      const k = keyOf(p.id), l = L[k], me = k === myKey, shown = S.linkShown && S.linkShown.k === k;
+      return `<div class="lrow"><div class="lname">${fullNameHtml(p.id)}${me ? ' <span class="muted small">(you)</span>' : ''}
+          <div class="small ${l ? 'pos' : 'dim'}">${l ? 'Has a link' : 'No link yet'}</div></div>
+        <div class="row nowrap lact">
+          <button class="btn sm" data-act="link-copy" data-id="${esc(p.id)}">Copy link</button>
+          ${l && !me ? `<button class="btn sm" data-act="link-reissue" data-id="${esc(p.id)}" title="New link; the old one stops working">Reissue</button>` : ''}
+          <label class="adm-t ${me ? 'off' : ''}" title="${me ? "You can't remove your own admin" : 'Admins can record games and hand out links'}"><input type="checkbox" data-admin="${esc(p.id)}" ${l && l.admin ? 'checked' : ''} ${me ? 'disabled' : ''}> Admin</label>
+        </div>
+        ${shown ? `<input class="lurl" readonly value="${esc(S.linkShown.url)}" aria-label="${esc(fullName(p.id))}'s link">` : ''}</div>`;
+    }).join('')}</div>`;
+  return `<div class="card" id="meLinks"><h2>Player links</h2>
+    <p class="hint" style="margin-top:0">Each player's personal link logs them in on their device, with no account or password, so they can set their roles. Admin links can also record games. Send each link only to its player; if one leaks, <b>Reissue</b> it.</p>
+    ${body}
+    <div class="row end" style="margin-top:10px"><button class="btn" data-act="hide-me-links">Done</button></div></div>`;
+}
+
+// ----- role preferences: public, edited by the player on their own page -----
+async function loadRoles() {
+  try {
+    const { data, error } = await (await sb()).from('roles').select('player, roles');
+    if (error) throw error;
+    S.roleRows = (data || []).filter(r => r && r.player && Array.isArray(r.roles));
+    if (S.data) update();
+  } catch { /* no roles: balancing ignores them */ }
+}
+function rolesCard(k) {
+  const prefs = S.roles[k] || null, mine = S.me && S.me.player && keyOf(resolveId(S.me.player)) === k;
+  const line = list => list.map(r => ROLE_NAME[r]).join(' › ');
+  if (!mine) return `<div class="card" id="roles"><h3 class="ctitle">Roles</h3>
+    <div>${prefs ? `<b>${esc(line(prefs))}</b>` : '<span class="muted">No role preferences yet.</span>'}</div></div>`;
+  const d = S.roleDraft || (S.roleDraft = prefs ? [...prefs] : []);
+  const changed = JSON.stringify(d) !== JSON.stringify(prefs || []);
+  return `<div class="card" id="roles"><h3 class="ctitle">Your roles</h3>
+    <p class="hint" style="margin-top:0">Tap roles in the order you like them, favourite first. Leave out any you'd rather not play; they count as your last pick. Everyone can see this, and ⚖ Balance uses it to hand out roles.</p>
+    <div class="role-pick">${ROLES.map(r => { const i = d.indexOf(r); return `<button class="rp ${i >= 0 ? 'on' : ''}" data-act="role-tap" data-role="${r}" aria-pressed="${i >= 0}">${i >= 0 ? `<b>${i + 1}</b>` : ''}${ROLE_NAME[r]}</button>`; }).join('')}</div>
+    <div class="small" style="margin:8px 0">${d.length ? esc(line(d)) : '<span class="muted">Nothing picked: any role is fine.</span>'}</div>
+    <div class="row end">${d.length ? '<button class="btn sm" data-act="role-clear">Clear</button>' : ''}<button class="btn sm gold" data-act="role-save" ${changed ? '' : 'disabled'}>Save</button></div></div>`;
+}
+async function saveRoles() {
+  try {
+    await rpc('set_roles', { p_code: S.me.code, p_roles: S.roleDraft || [] });
+    S.roleDraft = null; await loadRoles(); toast('Roles saved.');
+  } catch (e) { toast(`Couldn't save your roles — ${e.message}`, true); }
+}
+
 // ---------- events ----------
 document.addEventListener('click', async e => {
   const a = e.target.closest('[data-act]');
+  if (S.meMenu && !e.target.closest('#me')) { S.meMenu = false; renderMe(); } // tap outside closes the menu
   if (!a) return;
   const { act, id } = a.dataset;
   switch (act) {
@@ -979,9 +1226,12 @@ document.addEventListener('click', async e => {
     }
     case 'clear-teams': Object.assign(S.form, { blue: [], red: [], active: 'blue', locks: {}, bal: null }); saveFormState(); render(); break;
     case 'balance': balance(); break;
+    case 'bal-mode': setMode(a.dataset.mode); break;
+    case 'auto-roles': autoRoles(); break;
+    case 'noop': break;
     case 'bal-opt': useOption(Number(a.dataset.i)); break;
     case 'lock': setLock(id, a.dataset.side || null); break;
-    case 'unlock-all': S.form.locks = {}; if (balOn(S.form)) { const i = balOptions(S.form).findIndex(o => teamKey(o.blue) === teamKey(S.form.blue)); if (i >= 0) S.form.bal.opt = i; else { useOption(0); break; } } saveFormState(); render(); break;
+    case 'unlock-all': S.form.locks = {}; if (refreshBal()) break; saveFormState(); render(); break;
     case 'result':
       if (S.form.results.length >= 7) return toast('Max 7 games at once.', true);
       S.form.results.push(a.dataset.side); saveFormState(); render(); break;
@@ -1018,6 +1268,18 @@ document.addEventListener('click', async e => {
     case 'unnick': { const n = S.data.nicks[Number(a.dataset.i)]; commit(d => { d.nicks.splice(Number(a.dataset.i), 1); }, `Removed the nickname ${n.nick}.`); break; }
     case 'unlink': { const l = S.data.links[Number(a.dataset.i)]; commit(d => { d.links.splice(Number(a.dataset.i), 1); }, `Unlinked ${l.alt.split('#')[0]}.`); break; }
     case 'publish': publish(); break;
+    case 'me-menu': S.meMenu = !S.meMenu; renderMe(); break;
+    case 'me-page': S.meMenu = false; renderMe(); break;
+    case 'me-roles': S.meMenu = false; setTimeout(() => $('#roles')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120); break;
+    case 'me-ok': ME_FRESH = false; render(); break;
+    case 'logout': logout(); break;
+    case 'show-me-links': S.showMeLinks = true; S.meLinks = null; render(); loadMeLinks(); setTimeout(() => $('#meLinks')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); break;
+    case 'hide-me-links': S.showMeLinks = false; S.linkShown = null; render(); break;
+    case 'link-copy': linkAction('copy', id); break;
+    case 'link-reissue': linkAction('reissue', id); break;
+    case 'role-tap': { const d = S.roleDraft || (S.roleDraft = []), r = a.dataset.role, i = d.indexOf(r); i >= 0 ? d.splice(i, 1) : d.push(r); render(); break; }
+    case 'role-clear': S.roleDraft = []; render(); break;
+    case 'role-save': saveRoles(); break;
     case 'discard':
       if (confirm('Throw away your unpublished changes?')) { store.del(LS.draft); load(); }
       break;
@@ -1042,6 +1304,11 @@ document.addEventListener('input', e => {
   if (el.id === 'newPlayer') el.classList.remove('bad');
   if (S.form && el.dataset.f === 'date') { S.form.date = el.value; saveFormState(); }
   if (S.form && el.dataset.award) { awardOf(S.form, Number(el.dataset.i))[el.dataset.award] = el.value; saveFormState(); }
+  if (S.form && el.dataset.role != null) { setRole(el.dataset.role, el.value); el.blur(); }
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset && el.dataset.admin != null) adminToggle(el.dataset.admin, el.checked);
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
@@ -1059,6 +1326,12 @@ document.addEventListener('paste', e => {
 });
 
 load();
+// Solo/Duo ranks change rarely (refreshed by hand with tools/fetch-ranks.mjs), so load them once.
+fetch(`data/ranks.json?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => {
+  if (!j || !j.players) return;
+  S.ranks = j.players; S.ranksDate = j.updated;
+  if (S.data) update();
+}).catch(() => { /* no ranks: balancing uses ladder ratings only */ });
 // ---------- live updates ----------
 // 1. Doorbell (instant): after a publish, the publisher's browser rings a Supabase Realtime broadcast channel.
 //    Every open page hears it within a second or two and fetches the ladder from GitHub's API.
@@ -1097,12 +1370,7 @@ async function liveCheck(rang = false) {
 async function startDoorbell() {
   if (!LIVE.url || !LIVE.key) return;
   try {
-    await new Promise((ok, fail) => {
-      const sc = document.createElement('script');
-      sc.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
-      sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc);
-    });
-    const ch = window.supabase.createClient(LIVE.url, LIVE.key).channel('ladder', { config: { broadcast: { self: false } } });
+    const ch = (await sb()).channel('ladder', { config: { broadcast: { self: false } } });
     let last = 0;
     ch.on('broadcast', { event: 'updated' }, () => {
       const now = Date.now(); if (now - last < 5000) return; last = now; // ignore bursts
@@ -1115,3 +1383,5 @@ function ringDoorbell() { try { doorbell?.send({ type: 'broadcast', event: 'upda
 setInterval(() => liveCheck(), PAGES_EVERY);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) liveCheck(); });
 startDoorbell();
+checkMe();
+loadRoles();

@@ -1,0 +1,221 @@
+{
+  "updated": "2026-11-28",
+  "players": {
+    "aflinton#na1": {
+      "id": "AFlinton#na1",
+      "tier": "BRONZE",
+      "division": "III",
+      "lp": 94,
+      "wins": 42,
+      "losses": 55
+    },
+    "arsderps#na1": {
+      "id": "ArsDerps#NA1",
+      "tier": "PLATINUM",
+      "division": "I",
+      "lp": 7,
+      "wins": 8,
+      "losses": 2
+    },
+    "bananamilkk#na1": {
+      "id": "bananamilkk#na1",
+      "tier": "PLATINUM",
+      "division": "III",
+      "lp": 0,
+      "wins": 44,
+      "losses": 45
+    },
+    "bladdeey#drain": {
+      "id": "bladdeey#drain",
+      "tier": "PLATINUM",
+      "division": "IV",
+      "lp": 29,
+      "wins": 24,
+      "losses": 16
+    },
+    "borfo#na1": {
+      "id": "Borfo#NA1",
+      "tier": "PLATINUM",
+      "division": "IV",
+      "lp": 31,
+      "wins": 174,
+      "losses": 157
+    },
+    "bouncybear#big": {
+      "id": "BouncyBear#big",
+      "tier": "GOLD",
+      "division": "IV",
+      "lp": 60,
+      "wins": 11,
+      "losses": 7
+    },
+    "crims0nblad3#na1": {
+      "id": "Crims0nBlad3#NA1",
+      "status": "unranked"
+    },
+    "crpeak#lol": {
+      "id": "crpeak#lol",
+      "tier": "BRONZE",
+      "division": "I",
+      "lp": 64,
+      "wins": 16,
+      "losses": 15
+    },
+    "deceasedwalrus#na1": {
+      "id": "Deceased Walrus#na1",
+      "tier": "EMERALD",
+      "division": "IV",
+      "lp": 25,
+      "wins": 23,
+      "losses": 25
+    },
+    "deluge#7162": {
+      "id": "Deluge#7162",
+      "tier": "GOLD",
+      "division": "III",
+      "lp": 67,
+      "wins": 45,
+      "losses": 47
+    },
+    "docfrungus#na1": {
+      "id": "Doc Frungus#Na1",
+      "status": "unranked"
+    },
+    "dookiedoggo#ded": {
+      "id": "DookieDoggo#ded",
+      "tier": "GOLD",
+      "division": "I",
+      "lp": 95,
+      "wins": 33,
+      "losses": 21
+    },
+    "freljordbeast99#fun": {
+      "id": "Freljordbeast99#FUN",
+      "tier": "DIAMOND",
+      "division": "IV",
+      "lp": 1,
+      "wins": 114,
+      "losses": 104
+    },
+    "hadsiehockey#drbag": {
+      "id": "Hadsiehockey#DRBAG",
+      "tier": "SILVER",
+      "division": "III",
+      "lp": 97,
+      "wins": 10,
+      "losses": 9
+    },
+    "haeyoon#slvr": {
+      "id": "haeyoon#slvr",
+      "tier": "EMERALD",
+      "division": "IV",
+      "lp": 42,
+      "wins": 72,
+      "losses": 69
+    },
+    "jerry#hey": {
+      "id": "Jerry#hey",
+      "status": "unranked"
+    },
+    "jola#ten": {
+      "id": "Jola#ten",
+      "tier": "DIAMOND",
+      "division": "I",
+      "lp": 75,
+      "wins": 111,
+      "losses": 106
+    },
+    "jun#me0w": {
+      "id": "Jun#me0w",
+      "tier": "EMERALD",
+      "division": "IV",
+      "lp": 12,
+      "wins": 121,
+      "losses": 107
+    },
+    "karna#0322": {
+      "id": "Karna#0322",
+      "status": "unranked"
+    },
+    "leafeon#00000": {
+      "id": "leafeon#00000",
+      "tier": "PLATINUM",
+      "division": "III",
+      "lp": 78,
+      "wins": 71,
+      "losses": 71
+    },
+    "leonidas5052#0000": {
+      "id": "Leonidas5052#0000",
+      "tier": "EMERALD",
+      "division": "IV",
+      "lp": 26,
+      "wins": 21,
+      "losses": 26
+    },
+    "nivvk#na1": {
+      "id": "nivvk#NA1",
+      "tier": "DIAMOND",
+      "division": "I",
+      "lp": 75,
+      "wins": 560,
+      "losses": 548
+    },
+    "nomad#12121": {
+      "id": "Nomad#12121",
+      "tier": "PLATINUM",
+      "division": "II",
+      "lp": 61,
+      "wins": 147,
+      "losses": 138
+    },
+    "playmaker#pp00": {
+      "id": "Playmaker#pp00",
+      "tier": "SILVER",
+      "division": "I",
+      "lp": 13,
+      "wins": 21,
+      "losses": 16
+    },
+    "sagecat#5925": {
+      "id": "SAGE CAT#5925",
+      "tier": "GOLD",
+      "division": "II",
+      "lp": 80,
+      "wins": 20,
+      "losses": 18
+    },
+    "sparkofzaun99#zzz": {
+      "id": "SPARKOFZAUN99#ZZZ",
+      "tier": "DIAMOND",
+      "division": "II",
+      "lp": 87,
+      "wins": 343,
+      "losses": 303
+    },
+    "spoopysouls#na1": {
+      "id": "SpoopySouls#NA1",
+      "tier": "DIAMOND",
+      "division": "IV",
+      "lp": 20,
+      "wins": 181,
+      "losses": 179
+    },
+    "tokyoflavor#na1": {
+      "id": "TokyoFlavor#NA1",
+      "tier": "MASTER",
+      "division": "I",
+      "lp": 20,
+      "wins": 109,
+      "losses": 90
+    },
+    "widepeepotired#na1": {
+      "id": "WidePeepoTired#NA1",
+      "tier": "DIAMOND",
+      "division": "IV",
+      "lp": 20,
+      "wins": 86,
+      "losses": 92
+    }
+  }
+}
